@@ -1,0 +1,340 @@
+{
+  "pages": [
+    {
+      "id": "ship",
+      "title": "SHIP",
+      "panels": [
+        {
+          "id": "lights",
+          "title": "LIGHTS",
+          "columns": 3,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "ligh-amp-safety",
+              "label": "LIGHT AMPLIFICATION",
+              "keys": [
+                "LeftAlt",
+                "C"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "heat-safety",
+              "label": "HEAT",
+              "keys": [
+                "F6"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "ovrclk",
+              "label": "OVRCLK",
+              "keys": [
+                "F7"
+              ],
+              "initial": false
+            }
+          ]
+        },
+        {
+          "id": "doors",
+          "title": "DOORS",
+          "columns": 3,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "dr-open",
+              "label": "DOORS OPENED",
+              "keys": [
+                "RightShift",
+                "D"
+              ],
+              "initial": false
+            },
+            {
+              "type": "toggle",
+              "id": "dr-lock",
+              "label": "DOORS LOCKED",
+              "keys": [
+                "RightControl",
+                "D"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "dr-port-lock",
+              "label": "PINC",
+              "keys": [
+                "RightAlt",
+                "K"
+              ],
+              "initial": false
+            },
+            {
+              "type": "button",
+              "id": "tgt-pin1",
+              "label": "PIN 1",
+              "keys": [
+                "Num1"
+              ]
+            },
+            {
+              "type": "button",
+              "id": "tgt-pin2",
+              "label": "PIN 2",
+              "keys": [
+                "Num2"
+              ]
+            },
+            {
+              "type": "button",
+              "id": "tgt-pin3",
+              "label": "PIN 3",
+              "keys": [
+                "Num3"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "countermeasures",
+          "title": "COUNTERMEASURES",
+          "columns": 2,
+          "widgets": [
+            {
+              "type": "button",
+              "id": "cm-sel",
+              "label": "SEL",
+              "keys": [
+                "G"
+              ]
+            },
+            {
+              "type": "button",
+              "id": "cm-dply",
+              "label": "DPLY",
+              "keys": [
+                "H"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "self-destruct",
+          "title": "SELF DESTRUCT",
+          "columns": 1,
+          "widgets": [
+            {
+              "type": "button",
+              "id": "slf-dest",
+              "label": "SLF DEST",
+              "keys": [
+                "Backspace"
+              ],
+              "accent": "#ff4d4d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "flight",
+      "title": "FLIGHT / IFCS",
+      "panels": [
+        {
+          "id": "ifcs",
+          "title": "IFCS",
+          "columns": 3,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "esp",
+              "label": "ESP",
+              "keys": [
+                "LeftControl",
+                "E"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "cpl",
+              "label": "CPL",
+              "keys": [
+                "LeftAlt",
+                "C"
+              ],
+              "initial": false
+            },
+            {
+              "type": "toggle",
+              "id": "gsaf",
+              "label": "G-SF",
+              "keys": [
+                "LeftControl",
+                "G"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "prox",
+              "label": "PROX",
+              "keys": [
+                "LeftControl",
+                "P"
+              ],
+              "initial": true
+            }
+          ]
+        },
+        {
+          "id": "ship",
+          "title": "SHIP",
+          "columns": 3,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "gear",
+              "label": "GEAR",
+              "keys": [
+                "N"
+              ],
+              "initial": true
+            },
+            {
+              "type": "toggle",
+              "id": "lights",
+              "label": "LIGHTS",
+              "keys": [
+                "L"
+              ],
+              "initial": false
+            },
+            {
+              "type": "button",
+              "id": "qdrive",
+              "label": "QNTM",
+              "keys": [
+                "B"
+              ]
+            }
+          ]
+        },
+        {
+          "id": "display",
+          "title": "DISPLAY",
+          "columns": 2,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "hud",
+              "label": "HUD",
+              "keys": [
+                "F4"
+              ],
+              "initial": true
+            },
+            {
+              "type": "button",
+              "id": "navf",
+              "label": "NAV F",
+              "keys": [
+                "F2"
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "comms",
+      "title": "COMMS / SENSORS",
+      "panels": [
+        {
+          "id": "comms-panel",
+          "title": "COMMS",
+          "columns": 4,
+          "widgets": [
+            {
+              "type": "button",
+              "id": "hail",
+              "label": "HAIL",
+              "keys": [
+                "F11"
+              ]
+            },
+            {
+              "type": "button",
+              "id": "hail-ls",
+              "label": "HAIL LS",
+              "keys": [
+                "LeftShift",
+                "F11"
+              ]
+            },
+            {
+              "type": "toggle",
+              "id": "ptt",
+              "label": "PTT",
+              "keys": [
+                "LeftAlt",
+                "P"
+              ],
+              "initial": false
+            },
+            {
+              "type": "toggle",
+              "id": "itcom",
+              "label": "ITCOM",
+              "keys": [
+                "LeftAlt",
+                "F11"
+              ],
+              "initial": true
+            }
+          ]
+        },
+        {
+          "id": "sensors",
+          "title": "SENSORS",
+          "columns": 3,
+          "widgets": [
+            {
+              "type": "button",
+              "id": "sen",
+              "label": "SEN",
+              "keys": [
+                "V"
+              ]
+            },
+            {
+              "type": "toggle",
+              "id": "alarm",
+              "label": "ALARM",
+              "keys": [
+                "LeftAlt",
+                "A"
+              ],
+              "initial": false
+            },
+            {
+              "type": "toggle",
+              "id": "sil",
+              "label": "SIL",
+              "keys": [
+                "LeftAlt",
+                "S"
+              ],
+              "initial": false
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

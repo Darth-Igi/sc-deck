@@ -1,0 +1,31 @@
+{
+  "name": "sc-deck",
+  "version": "2.0.0",
+  "description": "Eigene Touch-Oberfl\u00e4che f\u00fcrs CORSAIR XENEON EDGE (React + Zustand + MUI), sendet Tastenkombinationen ans System",
+  "main": "main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
+    "build": "vite build",
+    "start": "npm run build && electron .",
+    "test": "node test/configValidation.test.js",
+    "test:ui": "npm run build && python3 test/render.test.py"
+  },
+  "dependencies": {
+    "@emotion/react": "^11.13.0",
+    "@emotion/styled": "^11.13.0",
+    "@mui/icons-material": "^5.16.0",
+    "@mui/material": "^5.16.0",
+    "@nut-tree-fork/nut-js": "^4.2.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^8.2.0",
+    "cross-env": "^7.0.3",
+    "electron": "^31.0.0",
+    "vite": "^5.4.0",
+    "wait-on": "^7.2.0"
+  }
+}
