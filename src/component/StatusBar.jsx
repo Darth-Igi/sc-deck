@@ -1,9 +1,9 @@
 import { Box, Typography } from "@mui/material";
-import { useDeckStore } from "../store";
-import { hud } from "../theme";
+import { useDeckStore } from "./../store";
+import { hud } from "./../theme";
 
-// Schmale Statuszeile (Fix #8): letzter Fehler sichtbar machen –
-// auf dem Edge gibt es im Vollbild keine Konsole.
+// Slim status bar: makes the last error visible - there is no console
+// on the Edge while running fullscreen.
 export default function StatusBar() {
   const lastError = useDeckStore((s) => s.lastError);
 
@@ -18,7 +18,7 @@ export default function StatusBar() {
       }}
     >
       <Typography sx={{ fontSize: "0.6rem", letterSpacing: "0.15em", color: hud.textDim }}>
-        SC DECK · BEENDEN: CTRL+ALT+Q ODER ⏻
+        SC DECK · QUIT: CTRL+ALT+Q OR ⏻
       </Typography>
       {lastError && (
         <Typography sx={{ fontSize: "0.6rem", letterSpacing: "0.1em", color: hud.danger }}>

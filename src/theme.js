@@ -1,17 +1,17 @@
 import { createTheme } from "@mui/material/styles";
 
-// Zentrale Design-Tokens für den "Ship HUD"-Look.
-// Für andere Hersteller-Looks (Origin, Aegis, RSI ...) einfach
-// eine Variante dieser Datei anlegen und in main.jsx umschalten.
+// Central design tokens for the "ship HUD" look.
+// For other manufacturer looks (Origin, Aegis, RSI ...) simply create a
+// variant of this object and switch it in main.jsx.
 export const hud = {
-  bg: "#06090f",            // fast schwarzer Hintergrund
+  bg: "#06090f",            // near-black background
   panelBg: "rgba(10, 20, 32, 0.55)",
-  line: "#57d9ff",          // Cyan der Panel-Rahmen
+  line: "#57d9ff",          // cyan of the panel borders
   lineDim: "rgba(87, 217, 255, 0.35)",
   glow: "rgba(87, 217, 255, 0.25)",
   text: "#cfefff",
   textDim: "rgba(207, 239, 255, 0.55)",
-  active: "#57d9ff",        // gefüllter Zustand (Toggle an)
+  active: "#57d9ff",        // filled state (toggle on)
   activeText: "#04121c",
   danger: "#ff4d4d",
 };
@@ -30,8 +30,8 @@ export const theme = createTheme({
     borderRadius: 12,
   },
   typography: {
-    // Eckige, technische Schrift; Orbitron/Michroma wären noch passender,
-    // dazu müsste man die Fontdatei lokal ins Projekt legen (kein CDN nötig)
+    // Angular, technical typeface; Orbitron/Michroma would fit even better -
+    // that would require bundling the font file locally (no CDN needed)
     fontFamily: '"Bahnschrift", "Segoe UI", sans-serif',
     button: {
       textTransform: "uppercase",

@@ -1,9 +1,9 @@
 import { Box } from "@mui/material";
-import { useDeckStore } from "../store";
-import { hud } from "../theme";
+import { useDeckStore } from "./../store";
+import { hud } from "./../theme";
 
-// Momentan-Taste im HUD-Stil: Pill-Form mit Cyan-Rand,
-// leuchtet beim Drücken kurz auf
+// Momentary button in HUD style: pill shape with cyan border,
+// lights up briefly while pressed
 export default function ButtonWidget({ widget }) {
   const triggerButton = useDeckStore((s) => s.triggerButton);
   const pressed = useDeckStore((s) => s.pressedId === widget.id);

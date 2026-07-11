@@ -1,10 +1,10 @@
 import { useEffect } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import { useDeckStore } from "../store";
-import { hud } from "../theme";
-import Panel from "../component/Panel";
-import PageNav from "../component/PageNav";
-import StatusBar from "../component/StatusBar";
+import { useDeckStore } from "./../store";
+import { hud } from "./../theme";
+import Panel from "./../component/Panel";
+import PageNav from "./../component/PageNav";
+import StatusBar from "./../component/StatusBar";
 
 export default function App() {
   const pages = useDeckStore((s) => s.pages);
@@ -16,6 +16,11 @@ export default function App() {
 
   useEffect(() => {
     loadConfig();
+    // Config hot reload: reload when config.json changes.
+    // onConfigChanged returns a cleanup function (unsubscribes the listener).
+    if (window.scDeck.onConfigChanged) {
+      return window.scDeck.onConfigChanged(() => loadConfig());
+    }
   }, [loadConfig]);
 
   const centered = {
@@ -37,12 +42,12 @@ export default function App() {
     );
   }
 
-  // Kaputte Config: Fehler sichtbar machen statt ewig zu laden (Fix #3)
+  // Broken config: show the errors instead of loading forever
   if (configError) {
     return (
       <Box sx={{ ...centered, alignItems: "flex-start", overflow: "auto" }}>
         <Typography sx={{ color: hud.danger, fontSize: "1.4rem", fontWeight: 700 }}>
-          CONFIG-FEHLER
+          CONFIG ERROR
         </Typography>
         <Typography sx={{ color: hud.textDim, fontSize: "0.8rem" }}>
           {configError.path}
@@ -61,7 +66,7 @@ export default function App() {
               fontWeight: 700, letterSpacing: "0.1em",
             }}
           >
-            NEU LADEN
+            RELOAD
           </Box>
           <Box
             onPointerDown={quit}
@@ -71,7 +76,7 @@ export default function App() {
               fontWeight: 700, letterSpacing: "0.1em",
             }}
           >
-            BEENDEN
+            QUIT
           </Box>
         </Box>
       </Box>
@@ -95,7 +100,7 @@ export default function App() {
     >
       <PageNav />
 
-      {/* Panelbreite an Spaltenzahl gewichten (Fix #9), min. Faktor 1 */}
+      {/* Weight panel widths by column count, minimum factor 1 */}
       <Box
         sx={{
           flex: 1,

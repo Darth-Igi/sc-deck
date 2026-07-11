@@ -1,21 +1,20 @@
 {
   "pages": [
     {
-      "id": "ship",
-      "title": "SHIP",
+      "id": "weapons",
+      "title": "WEAPONS",
       "panels": [
         {
-          "id": "lights",
-          "title": "LIGHTS",
+          "id": "safeties",
+          "title": "SAFETIES",
           "columns": 3,
           "widgets": [
             {
               "type": "toggle",
-              "id": "ligh-amp-safety",
-              "label": "LIGHT AMPLIFICATION",
+              "id": "wpn-safety",
+              "label": "WPN",
               "keys": [
-                "LeftAlt",
-                "C"
+                "F5"
               ],
               "initial": true
             },

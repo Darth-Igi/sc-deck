@@ -1,12 +1,12 @@
-// Validierung der config.json – bewusst ohne Electron-Abhängigkeiten,
-// damit sie separat testbar ist. Das Key-Enum wird injiziert.
+// Validation for config.json - deliberately free of Electron dependencies
+// so it can be tested in isolation. The key enum is injected.
 
 const VALID_TYPES = ["button", "toggle"];
 
 /**
- * Prüft die Config-Struktur, Key-Namen und doppelte IDs.
- * @param {object} config - geparste config.json
- * @param {object} keyEnum - das Key-Enum aus @nut-tree-fork/nut-js
+ * Checks config structure, key names, and duplicate IDs.
+ * @param {object} config - parsed config.json
+ * @param {object} keyEnum - the Key enum from @nut-tree-fork/nut-js
  * @returns {{ errors: string[], warnings: string[] }}
  */
 function validateConfig(config, keyEnum) {
@@ -14,43 +14,43 @@ function validateConfig(config, keyEnum) {
   const warnings = [];
 
   if (!config || !Array.isArray(config.pages)) {
-    errors.push('Config braucht ein "pages"-Array auf oberster Ebene.');
+    errors.push('Config requires a top-level "pages" array.');
     return { errors, warnings };
   }
   if (config.pages.length === 0) {
-    errors.push('"pages" ist leer – mindestens eine Seite wird benötigt.');
+    errors.push('"pages" is empty - at least one page is required.');
     return { errors, warnings };
   }
 
-  const seenIds = new Map(); // id -> Fundort
+  const seenIds = new Map(); // id -> location where it was first used
 
   config.pages.forEach((page, pi) => {
-    const pageRef = `Seite ${pi + 1} ("${page?.title ?? page?.id ?? "?"}")`;
+    const pageRef = `page ${pi + 1} ("${page?.title ?? page?.id ?? "?"}")`;
 
-    if (!page?.id) errors.push(`${pageRef}: "id" fehlt.`);
-    if (!page?.title) warnings.push(`${pageRef}: "title" fehlt.`);
+    if (!page?.id) errors.push(`${pageRef}: "id" is missing.`);
+    if (!page?.title) warnings.push(`${pageRef}: "title" is missing.`);
     if (!Array.isArray(page?.panels) || page.panels.length === 0) {
-      errors.push(`${pageRef}: "panels" fehlt oder ist leer.`);
+      errors.push(`${pageRef}: "panels" is missing or empty.`);
       return;
     }
 
     page.panels.forEach((panel, pli) => {
-      const panelRef = `${pageRef} → Panel ${pli + 1} ("${panel?.title ?? panel?.id ?? "?"}")`;
+      const panelRef = `${pageRef} -> panel ${pli + 1} ("${panel?.title ?? panel?.id ?? "?"}")`;
 
-      if (!panel?.id) errors.push(`${panelRef}: "id" fehlt.`);
+      if (!panel?.id) errors.push(`${panelRef}: "id" is missing.`);
       if (!Array.isArray(panel?.widgets) || panel.widgets.length === 0) {
-        errors.push(`${panelRef}: "widgets" fehlt oder ist leer.`);
+        errors.push(`${panelRef}: "widgets" is missing or empty.`);
         return;
       }
 
       panel.widgets.forEach((w, wi) => {
-        const wRef = `${panelRef} → Widget ${wi + 1} ("${w?.label ?? w?.id ?? "?"}")`;
+        const wRef = `${panelRef} -> widget ${wi + 1} ("${w?.label ?? w?.id ?? "?"}")`;
 
         if (!w?.id) {
-          errors.push(`${wRef}: "id" fehlt.`);
+          errors.push(`${wRef}: "id" is missing.`);
         } else if (seenIds.has(w.id)) {
           errors.push(
-            `${wRef}: doppelte ID "${w.id}" (bereits verwendet in ${seenIds.get(w.id)}).`
+            `${wRef}: duplicate ID "${w.id}" (already used in ${seenIds.get(w.id)}).`
           );
         } else {
           seenIds.set(w.id, wRef);
@@ -58,22 +58,22 @@ function validateConfig(config, keyEnum) {
 
         if (!VALID_TYPES.includes(w?.type)) {
           errors.push(
-            `${wRef}: unbekannter Typ "${w?.type}" (erlaubt: ${VALID_TYPES.join(", ")}).`
+            `${wRef}: unknown type "${w?.type}" (allowed: ${VALID_TYPES.join(", ")}).`
           );
         }
 
         if (!Array.isArray(w?.keys) || w.keys.length === 0) {
-          errors.push(`${wRef}: "keys" fehlt oder ist leer.`);
+          errors.push(`${wRef}: "keys" is missing or empty.`);
         } else {
           for (const k of w.keys) {
             if (typeof k !== "string" || !(k in keyEnum)) {
               errors.push(
-                `${wRef}: unbekannte Taste "${k}" – gültige Namen siehe nut.js Key-Enum (z.B. "LeftControl", "F5", "N").`
+                `${wRef}: unknown key "${k}" - see the nut.js Key enum for valid names (e.g. "LeftControl", "F5", "N").`
               );
             }
           }
           if (w.keys.length > 4) {
-            warnings.push(`${wRef}: ${w.keys.length} Tasten gleichzeitig – ungewöhnlich, Absicht?`);
+            warnings.push(`${wRef}: ${w.keys.length} keys at once - unusual, intended?`);
           }
         }
       });

@@ -1,8 +1,8 @@
 import { Box, IconButton, Typography } from "@mui/material";
-import { useDeckStore } from "../store";
-import { hud } from "../theme";
+import { useDeckStore } from "./../store";
+import { hud } from "./../theme";
 
-// Blätter-Leiste im Stil der < TITEL > Balken aus dem Spiel
+// Paging bar styled after the < TITLE > bars in the game
 export default function PageNav() {
   const pages = useDeckStore((s) => s.pages);
   const currentPageIndex = useDeckStore((s) => s.currentPageIndex);
@@ -34,7 +34,7 @@ export default function PageNav() {
         pb: 2,
       }}
     >
-      <IconButton sx={arrowSx} onPointerDown={prevPage} aria-label="Vorherige Seite">
+      <IconButton sx={arrowSx} onPointerDown={prevPage} aria-label="Previous page">
         {"‹"}
       </IconButton>
 
@@ -63,14 +63,14 @@ export default function PageNav() {
         </Typography>
       </Box>
 
-      <IconButton sx={arrowSx} onPointerDown={nextPage} aria-label="Nächste Seite">
+      <IconButton sx={arrowSx} onPointerDown={nextPage} aria-label="Next page">
         {"›"}
       </IconButton>
 
       <IconButton
         sx={{ ...arrowSx, height: 56, width: 64, borderColor: "rgba(255,77,77,0.4)", color: hud.danger }}
         onPointerDown={quit}
-        aria-label="App beenden"
+        aria-label="Quit app"
       >
         {"⏻"}
       </IconButton>

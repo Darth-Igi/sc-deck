@@ -9,31 +9,33 @@ const path = require("path");
 const fs = require("fs");
 const { validateConfig } = require("./configValidation");
 
-// nut.js direkt beim Start laden (Fix #12): schlägt das native Modul fehl,
-// merken wir uns den Fehler und zeigen ihn im UI, statt erst beim ersten
-// Tastendruck zu sterben.
+// Load nut.js right at startup: if the native module fails to load,
+// remember the error and surface it in the UI instead of dying on the
+// first key press.
 let nut = null;
 let nutLoadError = null;
 try {
   nut = require("@nut-tree-fork/nut-js");
   nut.keyboard.config.autoDelayMs = 20;
 } catch (err) {
-  nutLoadError = `nut.js konnte nicht geladen werden: ${err.message}`;
+  nutLoadError = `Failed to load nut.js: ${err.message}`;
   console.error(nutLoadError);
 }
 
 let mainWindow;
 
-// ---- Config: lebt in userData, damit sie ein Packaging überlebt (Fix #4) ----
-// Beim ersten Start wird die mitgelieferte Default-Config dorthin kopiert.
+// ---- Config path ----
+// Development (npm run dev / npm start without packaging): config.json in
+// the project folder is read DIRECTLY - no copy to userData, so edits take
+// effect immediately.
+// Packaged app (.exe): config lives in userData (the install directory is
+// read-only); on first launch the bundled default config is copied there.
 const defaultConfigPath = path.join(__dirname, "config.json");
 
-function getUserConfigPath() {
-  return path.join(app.getPath("userData"), "config.json");
-}
+function getActiveConfigPath() {
+  if (!app.isPackaged) return defaultConfigPath;
 
-function ensureUserConfig() {
-  const userPath = getUserConfigPath();
+  const userPath = path.join(app.getPath("userData"), "config.json");
   if (!fs.existsSync(userPath)) {
     fs.mkdirSync(path.dirname(userPath), { recursive: true });
     fs.copyFileSync(defaultConfigPath, userPath);
@@ -41,22 +43,22 @@ function ensureUserConfig() {
   return userPath;
 }
 
-// Lädt + validiert die Config. Wirft nie – gibt stattdessen ein
-// Ergebnis-Objekt zurück, das der Renderer anzeigen kann (Fix #3, #5, #6).
+// Loads + validates the config. Never throws - returns a result object
+// the renderer can display instead.
 function loadConfigSafe() {
-  const userPath = ensureUserConfig();
+  const activePath = getActiveConfigPath();
   let raw;
   try {
-    raw = fs.readFileSync(userPath, "utf-8");
+    raw = fs.readFileSync(activePath, "utf-8");
   } catch (err) {
-    return { ok: false, path: userPath, errors: [`Datei nicht lesbar: ${err.message}`] };
+    return { ok: false, path: activePath, errors: [`File not readable: ${err.message}`] };
   }
 
   let config;
   try {
     config = JSON.parse(raw);
   } catch (err) {
-    return { ok: false, path: userPath, errors: [`JSON-Fehler: ${err.message}`] };
+    return { ok: false, path: activePath, errors: [`JSON error: ${err.message}`] };
   }
 
   const keyEnum = nut ? nut.Key : {};
@@ -64,12 +66,12 @@ function loadConfigSafe() {
   if (nutLoadError) errors.unshift(nutLoadError);
 
   if (errors.length > 0) {
-    return { ok: false, path: userPath, errors, warnings };
+    return { ok: false, path: activePath, errors, warnings };
   }
-  return { ok: true, path: userPath, config, warnings };
+  return { ok: true, path: activePath, config, warnings };
 }
 
-// ---- Xeneon Edge erkennen (2560x720, notfalls: zweiter Bildschirm) ----
+// ---- Detect the Xeneon Edge (2560x720, fallback: any secondary display) ----
 function findTargetDisplay() {
   const displays = screen.getAllDisplays();
   const edge = displays.find(
@@ -98,12 +100,12 @@ function createWindow() {
     frame: false,
     fullscreen: true,
     resizable: false,
-    focusable: false, // Tap darf den Fokus nicht vom Spiel wegnehmen
+    focusable: false, // a tap must not steal focus from the game
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true, // Fix #13: Preload nutzt nur ipcRenderer, das geht sandboxed
+      sandbox: true, // preload only needs ipcRenderer, which works sandboxed
     },
   });
 
@@ -119,20 +121,46 @@ function createWindow() {
 app.whenReady().then(() => {
   createWindow();
 
-  // Fix #2: App ist ohne Fokus/Frame sonst nicht beendbar.
-  // Ctrl+Alt+Q beendet von überall – auch wenn das Spiel den Fokus hat.
+  // Without focus/frame the app would otherwise be unquittable.
+  // Ctrl+Alt+Q quits from anywhere - even while the game has focus.
   globalShortcut.register("Control+Alt+Q", () => app.quit());
 
-  // Fix #7: auf Monitor-Änderungen reagieren (Edge an-/abstecken, Standby)
+  // React to monitor changes (Edge plugged in/out, standby)
   screen.on("display-added", moveToTargetDisplay);
   screen.on("display-removed", moveToTargetDisplay);
+
+  // Config hot reload: pick up changes to the active config.json
+  // immediately (fs.watch may fire multiple times per save -> debounce).
+  watchConfig();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
 });
 
-app.on("will-quit", () => globalShortcut.unregisterAll());
+let configWatcher = null;
+let watchDebounce = null;
+
+function watchConfig() {
+  const activePath = getActiveConfigPath();
+  try {
+    configWatcher = fs.watch(activePath, () => {
+      clearTimeout(watchDebounce);
+      watchDebounce = setTimeout(() => {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("config-changed");
+        }
+      }, 150);
+    });
+  } catch (err) {
+    console.error("Failed to start config watcher:", err);
+  }
+}
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+  if (configWatcher) configWatcher.close();
+});
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
@@ -144,17 +172,17 @@ ipcMain.handle("get-config", () => loadConfigSafe());
 
 ipcMain.handle("quit-app", () => app.quit());
 
-// Fix #1: Hotkey-Queue – Tastenversand strikt serialisieren, damit sich
-// press/release zweier gleichzeitiger Taps nicht verschränken
-// (sonst kann aus Ctrl+T und Alt+C kurzzeitig Ctrl+Alt+T werden).
+// Hotkey queue: strictly serialize key dispatch so press/release of two
+// simultaneous taps cannot interleave (otherwise Ctrl+T plus Alt+C could
+// briefly register as Ctrl+Alt+T).
 let hotkeyQueue = Promise.resolve();
 
 async function doSendKeys(keys) {
-  if (!nut) throw new Error(nutLoadError || "nut.js nicht verfügbar");
+  if (!nut) throw new Error(nutLoadError || "nut.js not available");
   const { keyboard, Key } = nut;
 
   const keyConstants = keys.map((k) => {
-    if (!(k in Key)) throw new Error(`Unbekannte Taste: ${k}`);
+    if (!(k in Key)) throw new Error(`Unknown key: ${k}`);
     return Key[k];
   });
 
@@ -163,14 +191,14 @@ async function doSendKeys(keys) {
 }
 
 ipcMain.handle("send-hotkey", (_event, keys) => {
-  // Fix #13: IPC-Eingabe validieren, bevor sie die Queue erreicht
+  // Validate IPC input before it reaches the queue
   if (
     !Array.isArray(keys) ||
     keys.length === 0 ||
     keys.length > 8 ||
     !keys.every((k) => typeof k === "string" && k.length <= 32)
   ) {
-    return { ok: false, error: "Ungültige Tastenliste" };
+    return { ok: false, error: "Invalid key list" };
   }
 
   const job = hotkeyQueue.then(async () => {
@@ -178,11 +206,11 @@ ipcMain.handle("send-hotkey", (_event, keys) => {
       await doSendKeys(keys);
       return { ok: true };
     } catch (err) {
-      console.error("Fehler beim Senden der Tastenkombination:", err);
+      console.error("Failed to send hotkey:", err);
       return { ok: false, error: String(err) };
     }
   });
-  // Queue fortführen, egal ob der Job ok war (Fehler sind im Ergebnis-Objekt)
+  // Keep the queue going regardless of job outcome (errors are in the result)
   hotkeyQueue = job.then(() => {});
   return job;
 });

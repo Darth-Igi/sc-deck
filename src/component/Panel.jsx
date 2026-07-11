@@ -1,5 +1,5 @@
 import { Box, Typography } from "@mui/material";
-import { hud } from "../theme";
+import { hud } from "./../theme";
 import ButtonWidget from "./ButtonWidget";
 import ToggleWidget from "./ToggleWidget";
 
@@ -8,8 +8,8 @@ const WIDGETS = {
   toggle: ToggleWidget,
 };
 
-// Gruppiertes Panel mit Cyan-Rahmen und Titel, wie SAFETIES /
-// COUNTERMEASURES / TARGETING in den Cockpit-Screenshots
+// Grouped panel with cyan border and title, like SAFETIES /
+// COUNTERMEASURES / TARGETING in the cockpit screenshots
 export default function Panel({ panel }) {
   return (
     <Box
@@ -55,7 +55,7 @@ export default function Panel({ panel }) {
         {panel.widgets.map((widget) => {
           const Widget = WIDGETS[widget.type];
           if (!Widget) {
-            console.warn(`Unbekannter Widget-Typ: ${widget.type}`);
+            console.warn(`Unknown widget type: ${widget.type}`);
             return null;
           }
           return <Widget key={widget.id} widget={widget} />;

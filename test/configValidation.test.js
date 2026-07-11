@@ -1,4 +1,4 @@
-// Mini-Testsuite ohne Framework: node test/configValidation.test.js
+// Mini test suite without a framework: node test/configValidation.test.js
 const assert = require("assert");
 const { validateConfig } = require("../configValidation");
 const { Key } = require("@nut-tree-fork/nut-js");
@@ -13,54 +13,54 @@ function test(name, fn) {
 const widget = (over = {}) => ({ type: "button", id: "w1", label: "W", keys: ["N"], ...over });
 const wrap = (widgets) => ({ pages: [{ id: "p", title: "P", panels: [{ id: "pl", title: "PL", widgets }] }] });
 
-test("mitgelieferte config.json ist gültig", () => {
+test("bundled config.json is valid", () => {
   const cfg = JSON.parse(fs.readFileSync(__dirname + "/../config.json"));
   const { errors } = validateConfig(cfg, Key);
   assert.deepStrictEqual(errors, []);
 });
 
-test("gültige Minimal-Config: keine Fehler", () => {
+test("valid minimal config: no errors", () => {
   const { errors } = validateConfig(wrap([widget()]), Key);
   assert.deepStrictEqual(errors, []);
 });
 
-test("fehlendes pages-Array wird erkannt", () => {
+test("missing pages array is detected", () => {
   assert.ok(validateConfig({}, Key).errors.length > 0);
   assert.ok(validateConfig(null, Key).errors.length > 0);
 });
 
-test("leeres pages-Array wird erkannt", () => {
+test("empty pages array is detected", () => {
   assert.ok(validateConfig({ pages: [] }, Key).errors.length > 0);
 });
 
-test("unbekannter Tastenname wird erkannt", () => {
+test("unknown key name is detected", () => {
   const { errors } = validateConfig(wrap([widget({ keys: ["LeftCtrl"] })]), Key);
-  assert.ok(errors.some((e) => e.includes('LeftCtrl')));
+  assert.ok(errors.some((e) => e.includes("LeftCtrl")));
 });
 
-test("gültige Modifier passieren", () => {
+test("valid modifiers pass", () => {
   const { errors } = validateConfig(wrap([widget({ keys: ["LeftControl", "LeftAlt", "F5"] })]), Key);
   assert.deepStrictEqual(errors, []);
 });
 
-test("doppelte Widget-IDs werden erkannt", () => {
+test("duplicate widget IDs are detected", () => {
   const { errors } = validateConfig(wrap([widget(), widget({ label: "W2" })]), Key);
-  assert.ok(errors.some((e) => e.includes('doppelte ID')));
+  assert.ok(errors.some((e) => e.includes("duplicate ID")));
 });
 
-test("unbekannter Widget-Typ wird erkannt", () => {
+test("unknown widget type is detected", () => {
   const { errors } = validateConfig(wrap([widget({ type: "slider" })]), Key);
-  assert.ok(errors.some((e) => e.includes('slider')));
+  assert.ok(errors.some((e) => e.includes("slider")));
 });
 
-test("leere keys werden erkannt", () => {
+test("empty keys are detected", () => {
   const { errors } = validateConfig(wrap([widget({ keys: [] })]), Key);
   assert.ok(errors.length > 0);
 });
 
-test("Panel ohne Widgets wird erkannt", () => {
+test("panel without widgets is detected", () => {
   const cfg = { pages: [{ id: "p", title: "P", panels: [{ id: "pl", widgets: [] }] }] };
   assert.ok(validateConfig(cfg, Key).errors.length > 0);
 });
 
-console.log(`\n${passed} Tests bestanden`);
+console.log(`\n${passed} tests passed`);

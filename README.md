@@ -1,33 +1,44 @@
-# SC Deck v2.1 – Cockpit-Panels (React + Zustand + MUI)
+# SC Deck v2.3 - Cockpit panels (React + Zustand + MUI)
+
+Custom touch control surface for the CORSAIR XENEON EDGE. Sends key
+combinations to the system (e.g. for Star Citizen) from a freely
+configurable, ship-HUD-style interface.
 
 ## Setup
 
 ```bash
 npm install
-npm run dev     # Entwicklung mit Hot Reload
-npm start       # baut + startet die fertige App
-npm test        # Unit-Tests der Config-Validierung
+npm run dev     # development with hot reload
+npm start       # builds + launches the finished app
+npm test        # unit tests for the config validation
 ```
 
-## App beenden
+## Quitting the app
 
-Da das Fenster bewusst nicht fokussierbar ist (kein Fokus-Diebstahl vom
-Spiel), funktioniert Alt+F4 nicht. Stattdessen:
+The window is deliberately non-focusable (so taps never steal focus from
+the game), which means Alt+F4 does not work. Instead:
 
-- **Ctrl+Alt+Q** (globaler Shortcut, funktioniert auch wenn das Spiel den
-  Fokus hat), oder
-- der rote **⏻**-Button oben rechts auf dem Touchscreen.
+- **Ctrl+Alt+Q** (global shortcut, works even while the game has focus), or
+- the red **⏻** button in the top right corner of the touchscreen.
 
-## Wo liegt die Config?
+## Where does the config live?
 
-Beim ersten Start wird die mitgelieferte `config.json` nach
-`%APPDATA%/sc-deck/config.json` (Electron `userData`) kopiert – **dort**
-wird ab dann editiert. Grund: Nach einem Packaging als .exe ist das
-Programmverzeichnis read-only; die Nutzer-Config muss davon getrennt leben.
-Der genaue Pfad steht im Fehlerbildschirm bzw. lässt sich per
-`Ctrl+Alt+Q`-Neustart nach Änderungen neu laden (oder Button „NEU LADEN").
+- **Development** (`npm run dev` / `npm start`): the `config.json` **in the
+  project folder** is read directly. Nothing is copied to AppData.
+- **Packaged app** (.exe): on first launch the bundled config is copied to
+  `%APPDATA%/sc-deck/config.json` (Electron `userData`) and read from there
+  afterwards - the install directory is read-only after packaging.
 
-## Config-Schema: Pages → Panels → Widgets
+**Config hot reload**: the active config file is watched. Just save - the
+UI reloads immediately, keeping the current page and all toggle states. If
+the file is broken, the error screen appears; it disappears again
+automatically once you fix and save.
+
+Note: if an earlier version already created a copy under
+`%APPDATA%\Roaming\sc-deck\config.json`, you can delete it - it is no
+longer used in development mode.
+
+## Config schema: pages -> panels -> widgets
 
 ```json
 {
@@ -51,39 +62,39 @@ Der genaue Pfad steht im Fehlerbildschirm bzw. lässt sich per
 }
 ```
 
-- **`button`** – Momentan-Taste. **`toggle`** – merkt sich lokalen
-  An/Aus-Zustand (nur Vermutung, das Spiel meldet nichts zurück).
-- `accent` (Widget): eigene Akzentfarbe, z.B. `"#ff4d4d"`.
-- `columns` (Panel): Spalten des Widget-Rasters; bestimmt zugleich die
-  relative Panelbreite auf der Seite.
+- **`button`** - momentary key. **`toggle`** - additionally remembers a
+  local on/off state (an assumption only; the game does not report back).
+- `accent` (widget): custom accent color, e.g. `"#ff4d4d"`.
+- `columns` (panel): columns of the widget grid; also determines the
+  relative panel width on the page.
 
-Die Config wird beim Laden **validiert** (Struktur, Tastennamen gegen das
-nut.js-Key-Enum, doppelte IDs). Fehler erscheinen als Bildschirmmeldung mit
-Dateipfad – nicht erst beim Tastendruck im Spiel.
+The config is **validated** on load (structure, key names against the
+nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with
+the file path - not only when a key is pressed in the middle of a game.
 
-## Robustheit
+## Robustness
 
-- Tastenversand läuft durch eine **Queue**: gleichzeitige Taps können sich
-  nicht zu falschen Kombinationen verschränken (z.B. Ctrl+T + Alt+C ≠ Ctrl+Alt+T).
-- Monitor-Hotplug: wird das Xeneon Edge nachträglich angesteckt, zieht das
-  Fenster automatisch um.
-- Fehler beim Tastenversand erscheinen in der Statuszeile unten (auf dem
-  Edge gibt es im Vollbild keine Konsole).
+- Key dispatch runs through a **queue**: simultaneous taps cannot
+  interleave into wrong combinations.
+- Monitor hotplug: if the Xeneon Edge is plugged in later, the window
+  moves over automatically.
+- Key dispatch errors appear in the status bar at the bottom.
 
-## Administratorrechte
+## Administrator rights
 
-Läuft Star Citizen/Launcher erhöht, muss SC Deck ebenfalls als Administrator
-gestartet werden (Windows UIPI), sonst kommen die Tasten nicht an.
+If Star Citizen / the RSI launcher runs elevated, SC Deck must also be
+started as administrator (Windows UIPI), otherwise the key presses will
+not arrive.
 
 ## Tests
 
-- `npm test` – Unit-Tests der Config-Validierung (Node, kein Framework).
-- `npm run test:ui` – Headless-Render-Test (benötigt Python + Playwright):
-  prüft Rendering, Toggle-Versand, Seitennavigation, Exit-Button und den
-  Config-Fehlerbildschirm.
+- `npm test` - unit tests for the config validation (Node, no framework).
+- `npm run test:ui` - headless render tests (requires Python + Playwright):
+  rendering, toggle dispatch, navigation, quit button, config error screen,
+  and hot reload (page + toggle state preserved).
 
-## Nächste Ausbaustufen
+## Next steps
 
-- Power-Dreieck / Slider mit gekoppelten Werten als eigenes Widget
-- Formular-Editiermodus in der App statt JSON-Handbearbeitung
-- Long-Press auf Toggle: Zustand korrigieren ohne Taste zu senden
+- Power triangle / sliders with coupled values as a dedicated widget
+- In-app form-based edit mode instead of hand-editing JSON
+- Long press on a toggle: correct the state without sending a key

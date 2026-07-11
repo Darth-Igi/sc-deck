@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { ThemeProvider, CssBaseline } from "@mui/material";
 import { theme } from "./theme";
-import App from "./page/App";
+import App from "./page//App";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
