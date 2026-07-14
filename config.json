@@ -1,8 +1,8 @@
 {
   "pages": [
     {
-      "id": "weapons",
-      "title": "WEAPONS",
+      "id": "ship",
+      "title": "SHIP",
       "panels": [
         {
           "id": "safeties",
@@ -100,25 +100,28 @@
           ]
         },
         {
-          "id": "countermeasures",
-          "title": "COUNTERMEASURES",
+          "id": "lights",
+          "title": "LIGHTS",
           "columns": 2,
           "widgets": [
             {
-              "type": "button",
-              "id": "cm-sel",
-              "label": "SEL",
+              "type": "toggle",
+              "id": "lg-headlights",
+              "label": "HEADLIGHTS",
               "keys": [
-                "G"
-              ]
+                "L"
+              ],
+              "initial": false
             },
             {
-              "type": "button",
-              "id": "cm-dply",
-              "label": "DPLY",
+              "type": "toggle",
+              "id": "lg-amplifier",
+              "label": "LIGHT AMPLIFICATION",
               "keys": [
-                "H"
-              ]
+                "RightAlt",
+                "L"
+              ],
+              "initial": false
             }
           ]
         },

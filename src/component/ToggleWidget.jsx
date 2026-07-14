@@ -19,22 +19,30 @@ const ToggleSwitch = styled(Switch)(({ theme }) => ({
   '& .MuiSwitch-switchBase': {
     padding: 2,
     '&.Mui-checked': {
-      transform: 'translateX(46px)',
-      color: '#fff',
+      transform: 'translateX(48px)', // active position
       '& + .MuiSwitch-track': {
         opacity: 1,
-        backgroundColor: '#1890ff',
+        backgroundColor: 'transparent',
         ...theme.applyStyles('dark', {
-          backgroundColor: '#177ddc',
+          backgroundColor: 'transparent',
         }),
+      },
+      '& .MuiSwitch-thumb': {
+        backgroundColor: hud.active,
+        boxShadow: `0 0 6px 3px ${hud.active}`,
+        width: 40,
+        height: 40,
+        borderRadius: 20,
+        margin: '2px 0 0 2px',
       },
     },
   },
   '& .MuiSwitch-thumb': {
-    boxShadow: '0 2px 4px 0 rgb(0 35 11 / 20%)',
-    width: 46,
-    height: 46,
-    borderRadius: 23,
+    backgroundColor: hud.glow,
+    border: `2px solid ${hud.active}`,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     transition: theme.transitions.create(['width'], {
       duration: 200,
     }),
@@ -48,7 +56,7 @@ const ToggleSwitch = styled(Switch)(({ theme }) => ({
     backgroundColor: 'rgba(0,0,0,.25)',
     boxSizing: 'border-box',
     ...theme.applyStyles('dark', {
-      backgroundColor: 'rgba(255,255,255,.35)',
+      backgroundColor: 'transparent',
     }),
   },
 }))
