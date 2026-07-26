@@ -10,4 +10,11 @@ contextBridge.exposeInMainWorld("scDeck", {
     ipcRenderer.on("config-changed", listener);
     return () => ipcRenderer.removeListener("config-changed", listener);
   },
+  // Game.log events (vehicle changed/destroyed, player killed, session
+  // reset, watcher status) - only fires when config.gamelog.enabled is true
+  onGameEvent: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("game-event", listener);
+    return () => ipcRenderer.removeListener("game-event", listener);
+  },
 });

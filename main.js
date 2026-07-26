@@ -8,6 +8,11 @@ const {
 const path = require("path");
 const fs = require("fs");
 const { validateConfig } = require("./configValidation");
+const {
+  createGameLogParser,
+  createGameLogTailer,
+  DEFAULT_LOG_PATH,
+} = require("./gamelog");
 
 // Load nut.js right at startup: if the native module fails to load,
 // remember the error and surface it in the UI instead of dying on the
@@ -20,6 +25,29 @@ try {
 } catch (err) {
   nutLoadError = `Failed to load nut.js: ${err.message}`;
   console.error(nutLoadError);
+}
+
+// Scancode sender (SendInput with KEYEVENTF_SCANCODE): preferred dispatch
+// path. nut.js sends virtual keys without the extended-key flag, so games
+// reading raw scancodes (Star Citizen) see RightControl/RightAlt as the
+// LEFT variant. Initialized eagerly for the same fail-fast reason as
+// nut.js above; nut.js stays as fallback for keys without a scancode
+// mapping (e.g. Pause) and for non-Windows dev machines.
+const {
+  createScancodeSender,
+  SCANCODE_KEY_NAMES,
+  canSendViaScancodes,
+} = require("./scancodeSender");
+
+let scancodeSender = null;
+let scancodeLoadError = null;
+if (process.platform === "win32") {
+  try {
+    scancodeSender = createScancodeSender();
+  } catch (err) {
+    scancodeLoadError = `Failed to init scancode sender: ${err.message}`;
+    console.error(scancodeLoadError);
+  }
 }
 
 let mainWindow;
@@ -61,9 +89,19 @@ function loadConfigSafe() {
     return { ok: false, path: activePath, errors: [`JSON error: ${err.message}`] };
   }
 
-  const keyEnum = nut ? nut.Key : {};
+  // Valid key names = union of both dispatch paths. With the scancode
+  // sender available, a broken nut.js is downgraded to a warning: every
+  // key the validator then still accepts is scancode-mappable and works.
+  const keyEnum = {
+    ...(scancodeSender ? SCANCODE_KEY_NAMES : {}),
+    ...(nut ? nut.Key : {}),
+  };
   const { errors, warnings } = validateConfig(config, keyEnum);
-  if (nutLoadError) errors.unshift(nutLoadError);
+  if (nutLoadError) {
+    if (scancodeSender) warnings.unshift(`${nutLoadError} (scancode sender active, unmapped keys would fail)`);
+    else errors.unshift(nutLoadError);
+  }
+  if (scancodeLoadError) warnings.unshift(scancodeLoadError);
 
   if (errors.length > 0) {
     return { ok: false, path: activePath, errors, warnings };
@@ -116,6 +154,13 @@ function createWindow() {
   } else {
     mainWindow.loadFile(path.join(__dirname, "dist", "index.html"));
   }
+
+  // Game.log watcher (optional, config.gamelog.enabled). (Re)started on
+  // EVERY finish-load - not just the first one - so a re-created or
+  // reloaded window gets the replayed startup events too (which prime
+  // "which ship are we in"; the freshly loaded UI is at its initial state,
+  // so replaying is harmless).
+  mainWindow.webContents.on("did-finish-load", () => restartGameLog());
 }
 
 app.whenReady().then(() => {
@@ -143,13 +188,23 @@ let watchDebounce = null;
 
 function watchConfig() {
   const activePath = getActiveConfigPath();
+  // Watch the DIRECTORY, not the file: editors like Notepad++ often save
+  // via rename-replace, which leaves a file watcher attached to a dead
+  // handle - hot reload would silently stop working. Directory watching
+  // survives that; we filter events down to our config file name.
+  const dir = path.dirname(activePath);
+  const base = path.basename(activePath);
   try {
-    configWatcher = fs.watch(activePath, () => {
+    configWatcher = fs.watch(dir, (_eventType, filename) => {
+      // filename may be null on some platforms -> react anyway (debounced)
+      if (filename && filename !== base) return;
       clearTimeout(watchDebounce);
       watchDebounce = setTimeout(() => {
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("config-changed");
         }
+        // gamelog settings (enabled/path/patterns) may have changed too
+        restartGameLog();
       }, 150);
     });
   } catch (err) {
@@ -157,9 +212,54 @@ function watchConfig() {
   }
 }
 
+// ---- Game.log watcher ----
+// Feeds Game.log lines through the parser and forwards the resulting
+// semantic events to the renderer, which resets/restores toggle states.
+// On startup the existing log is replayed from the beginning so the parser
+// knows which ship the player is already sitting in - at that point the UI
+// is still at its initial state, so the replayed events are harmless.
+let gamelogTailer = null;
+
+function sendGameEvent(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("game-event", payload);
+  }
+}
+
+function restartGameLog() {
+  if (gamelogTailer) {
+    gamelogTailer.stop();
+    gamelogTailer = null;
+  }
+
+  const result = loadConfigSafe();
+  const gamelog = result.ok ? result.config.gamelog : null;
+  if (!gamelog || !gamelog.enabled) return;
+
+  const logPath = gamelog.path || DEFAULT_LOG_PATH;
+  const parser = createGameLogParser({
+    patterns: gamelog.patterns,
+    playerName: gamelog.playerName,
+    onEvent: (event) => {
+      console.log("[gamelog]", JSON.stringify(event));
+      sendGameEvent(event);
+    },
+  });
+
+  gamelogTailer = createGameLogTailer({
+    filePath: logPath,
+    pollMs: gamelog.pollMs || 750,
+    onLine: (line) => parser.feedLine(line),
+    onTruncate: () => parser.resetSession(),
+    onStatus: (state) => sendGameEvent({ type: "gamelog-status", state, path: logPath }),
+  });
+}
+
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
+  clearTimeout(watchDebounce); // pending debounce must not fire into teardown
   if (configWatcher) configWatcher.close();
+  if (gamelogTailer) gamelogTailer.stop();
 });
 
 app.on("window-all-closed", () => {
@@ -178,11 +278,23 @@ ipcMain.handle("quit-app", () => app.quit());
 let hotkeyQueue = Promise.resolve();
 
 async function doSendKeys(keys) {
+  // Preferred path: scancodes with correct extended-key flags. All-or-
+  // nothing per combo - mixing both senders within one chord could
+  // interleave on the system input queue.
+  if (scancodeSender && canSendViaScancodes(keys)) {
+    await scancodeSender.sendCombo(keys);
+    return;
+  }
+
   if (!nut) throw new Error(nutLoadError || "nut.js not available");
   const { keyboard, Key } = nut;
 
   const keyConstants = keys.map((k) => {
-    if (!(k in Key)) throw new Error(`Unknown key: ${k}`);
+    // hasOwnProperty, not `in`: `in` also matches prototype members like
+    // "toString", which would pass validation and then blow up in nut.js
+    if (!Object.prototype.hasOwnProperty.call(Key, k)) {
+      throw new Error(`Unknown key: ${k}`);
+    }
     return Key[k];
   });
 

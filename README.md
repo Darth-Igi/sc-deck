@@ -1,4 +1,4 @@
-# SC Deck v2.3 - Cockpit panels (React + Zustand + MUI)
+# SC Deck v2.4 - Cockpit panels + Game.log tracking (React + Zustand + MUI)
 
 Custom touch control surface for the CORSAIR XENEON EDGE. Sends key
 combinations to the system (e.g. for Star Citizen) from a freely
@@ -98,3 +98,47 @@ not arrive.
 - Power triangle / sliders with coupled values as a dedicated widget
 - In-app form-based edit mode instead of hand-editing JSON
 - Long press on a toggle: correct the state without sending a key
+
+## Game.log tracking (v2.4): automatic toggle reset per ship
+
+Star Citizen has no API to read component states (lights, power, ...), but
+it writes events to a local `Game.log`. SC Deck can tail that file and use
+it as an **event trigger** to keep the (locally assumed) toggle states from
+drifting:
+
+- **Standing up / re-entering the same ship**: no reset - interior zone
+  entries carry a unique spawn instance ID, and the same ID means the same
+  ship with unchanged state.
+- **Boarding a different ship** (also: the same model freshly claimed or
+  respawned - it gets a new instance ID): toggles reset to their `initial`
+  values, or are restored from what the deck remembers about that instance.
+- **Your ship gets destroyed / you die / the game restarts**: reset.
+- **Limitation**: powering the ship off while staying inside it is NOT
+  logged and cannot be detected - correct such drift manually (the store
+  already has `setToggleState` for a future long-press).
+
+Enable it in `config.json`:
+
+```json
+"gamelog": {
+  "enabled": true,
+  "path": "C:\\Program Files\\Roberts Space Industries\\StarCitizen\\LIVE\\Game.log",
+  "pollMs": 750,
+  "playerName": "YourHandle"
+}
+```
+
+- `path` may be `null` -> the default install path above is used.
+- `playerName` is optional; normally the handle is auto-detected from the
+  login line in the log. Setting it makes entity filtering exact from the
+  first line on.
+- `patterns` (optional object of regex strings) overrides the built-in log
+  line patterns. **Log formats change between patches without notice** - if
+  tracking silently stops working after an update, compare the current
+  `Game.log` lines with the defaults in `gamelog.js` and override the
+  affected pattern in the config (hot reload applies it immediately, no
+  restart needed).
+
+The status bar shows the tracked ship (`SHIP: AEGS_Gladius`), reset events,
+and `GAME.LOG NOT FOUND` if the file is missing (game not running or wrong
+path).

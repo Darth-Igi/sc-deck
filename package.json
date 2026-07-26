@@ -1,14 +1,14 @@
 {
   "name": "sc-deck",
-  "version": "2.0.0",
+  "version": "2.7.0",
   "description": "Custom touch control surface for the CORSAIR XENEON EDGE (React + Zustand + MUI); sends key combinations to the system (e.g. for Star Citizen)",
   "main": "main.js",
   "scripts": {
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
     "build": "vite build",
     "start": "npm run build && electron .",
-    "test": "node test/configValidation.test.js",
-    "test:ui": "npm run build && python3 test/render.test.py && python3 test/hotreload.test.py"
+    "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/scancode.test.js",
+    "test:ui": "npm run build && python3 test/render.test.py && python3 test/hotreload.test.py && python3 test/gamelog.render.test.py"
   },
   "dependencies": {
     "@emotion/react": "^11.13.0",
@@ -18,7 +18,8 @@
     "@nut-tree-fork/nut-js": "^4.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "zustand": "^4.5.0"
+    "zustand": "^4.5.0",
+    "koffi": "^2.9.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",

@@ -1,4 +1,9 @@
 import { create } from "zustand";
+import {
+  applyGameEvent,
+  describeGameEvent,
+  initialToggleStates,
+} from "./gameEvents";
 
 export const useDeckStore = create((set, get) => ({
   // ---- Configuration (from config.json via the main process) ----
@@ -15,6 +20,36 @@ export const useDeckStore = create((set, get) => ({
   errorId: null,       // last widget whose hotkey dispatch failed
   lastError: null,     // { message, time } for the status bar
   toggleStates: {},    // { [widgetId]: boolean } - local "assumed" state
+
+  // ---- Game.log tracking (see src/gameEvents.js) ----
+  currentVehicleId: null,    // ship instance we are (assumed to be) in
+  currentVehicleClass: null, // e.g. "AEGS_Gladius" - shown in the status bar
+  vehicleMemory: {},         // { [vehicleId]: toggleStates } per-ship memory
+  gameStatus: null,          // { message, time } last game event, status bar
+  gamelogState: null,        // "watching" | "missing" - tailer status
+
+  // Semantic events from the main process (Game.log watcher). Toggle
+  // states survive standing up / re-entering the SAME ship (no event is
+  // emitted for that); a different ship instance, destruction, death or a
+  // game restart resets them to the config's "initial" values.
+  handleGameEvent: (event) => {
+    if (event.type === "gamelog-status") {
+      set({ gamelogState: event.state });
+      return;
+    }
+    const { toggleStates, currentVehicleId, vehicleMemory, pages } = get();
+    const update = applyGameEvent(
+      { toggleStates, currentVehicleId, vehicleMemory },
+      event,
+      pages
+    );
+    if (!update) return;
+    const message = describeGameEvent(event);
+    if (message) {
+      update.gameStatus = { message, time: new Date().toLocaleTimeString() };
+    }
+    set(update);
+  },
 
   loadConfig: async () => {
     let result;
@@ -130,6 +165,21 @@ export const useDeckStore = create((set, get) => ({
       }));
     }
   },
+
+  // Manual reset (⟲ button in the nav bar): back to the config's
+  // "initial" values WITHOUT sending any keys. Covers the known gap where
+  // the game changed state without us noticing (e.g. ship power-off in the
+  // same ship, keys pressed on the physical keyboard). Vehicle tracking is
+  // untouched - on the next ship change the reset state is what gets
+  // remembered for this ship, which is exactly right.
+  resetToggles: () =>
+    set((state) => ({
+      toggleStates: initialToggleStates(state.pages),
+      gameStatus: {
+        message: "MANUAL RESET",
+        time: new Date().toLocaleTimeString(),
+      },
+    })),
 
   // Manual correction (e.g. when the game changed state without us
   // noticing): a long press could use this later

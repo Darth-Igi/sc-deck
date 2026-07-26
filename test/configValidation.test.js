@@ -63,4 +63,39 @@ test("panel without widgets is detected", () => {
   assert.ok(validateConfig(cfg, Key).errors.length > 0);
 });
 
+test("valid gamelog section passes", () => {
+  const cfg = { ...wrap([widget()]), gamelog: { enabled: true, path: "C:\\x\\Game.log", pollMs: 500 } };
+  assert.deepStrictEqual(validateConfig(cfg, Key).errors, []);
+});
+
+test("gamelog with invalid types is detected", () => {
+  const cfg = { ...wrap([widget()]), gamelog: { enabled: "yes", pollMs: 10 } };
+  const { errors } = validateConfig(cfg, Key);
+  assert.ok(errors.some((e) => e.includes("gamelog.enabled")));
+  assert.ok(errors.some((e) => e.includes("gamelog.pollMs")));
+});
+
+test("gamelog with broken regex pattern is detected", () => {
+  const cfg = { ...wrap([widget()]), gamelog: { enabled: true, patterns: { zoneEnter: "([unclosed" } } };
+  const { errors } = validateConfig(cfg, Key);
+  assert.ok(errors.some((e) => e.includes("zoneEnter")));
+});
+
+test('non-boolean "initial" produces a warning', () => {
+  const cfg = wrap([widget({ type: "toggle", initial: "false" })]);
+  const { errors, warnings } = validateConfig(cfg, Key);
+  assert.deepStrictEqual(errors, []); // warning only, not an error
+  assert.ok(warnings.some((w) => w.includes('"initial"')));
+  // proper booleans stay silent
+  const ok = validateConfig(wrap([widget({ type: "toggle", initial: false })]), Key);
+  assert.ok(!ok.warnings.some((w) => w.includes('"initial"')));
+});
+
+test("prototype members are not valid key names", () => {
+  // `in` would accept "toString" via the prototype chain - hasOwnProperty
+  // must reject it (same guard exists in main.js doSendKeys)
+  const { errors } = validateConfig(wrap([widget({ keys: ["toString"] })]), Key);
+  assert.ok(errors.some((e) => e.includes("toString")));
+});
+
 console.log(`\n${passed} tests passed`);

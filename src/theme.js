@@ -14,6 +14,7 @@ export const hud = {
   active: "#57d9ff",        // filled state (toggle on)
   activeText: "#04121c",
   danger: "#ff4d4d",
+  warn: "#ffc400",         // amber accent (reset button)
 };
 
 export const theme = createTheme({

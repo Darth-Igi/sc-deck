@@ -32,17 +32,43 @@ with sync_playwright() as p:
     page.wait_for_timeout(1200)
 
     assert page.get_by_text("SAFETIES").count() > 0, "panel SAFETIES missing"
-    ovr = page.get_by_text("OVRCLK", exact=True)
-    ovr.dispatch_event("pointerdown")
+    # Toggles trigger on POINTERDOWN on the FormControlLabel (consistent
+    # with the momentary buttons, no click latency)
+    page.locator('label:has-text("OVRCLK")').dispatch_event("pointerdown")
     page.wait_for_timeout(200)
     assert page.evaluate("window.__lastKeys") == ["F7"], "toggle sends wrong keys"
+
+    # Reset button (far left): OVRCLK was just toggled on (initial: false).
+    # Guarded by LONG PRESS: a short tap must do nothing; holding >600ms
+    # resets to the initial state WITHOUT sending keys.
+    ovrclk = page.locator('label:has-text("OVRCLK") input[type=checkbox]')
+    assert ovrclk.is_checked(), "OVRCLK should be on after the toggle above"
+    page.evaluate("window.__lastKeys = null")
+    reset_btn = page.locator('[aria-label="Reset toggles"]')
+    reset_btn.dispatch_event("pointerdown")
+    page.wait_for_timeout(200)
+    reset_btn.dispatch_event("pointerup")  # released too early
+    page.wait_for_timeout(600)
+    assert ovrclk.is_checked(), "short tap must NOT reset"
+    reset_btn.dispatch_event("pointerdown")
+    page.wait_for_timeout(800)  # held past the 600ms threshold
+    assert not ovrclk.is_checked(), "long press did not restore initial state"
+    assert page.evaluate("window.__lastKeys") is None, "reset must not send keys"
+    print("✓ reset button ok (long press resets, short tap ignored, no keys sent)")
 
     page.locator('[aria-label="Next page"]').dispatch_event("pointerdown")
     page.wait_for_timeout(300)
     assert page.get_by_text("IFCS").count() > 0, "page switching broken"
 
-    page.locator('[aria-label="Quit app"]').dispatch_event("pointerdown")
+    # Quit is long-press guarded too: short tap must not quit
+    quit_btn = page.locator('[aria-label="Quit app"]')
+    quit_btn.dispatch_event("pointerdown")
     page.wait_for_timeout(200)
+    quit_btn.dispatch_event("pointerup")
+    page.wait_for_timeout(600)
+    assert page.evaluate("window.__quit") is None, "short tap must NOT quit"
+    quit_btn.dispatch_event("pointerdown")
+    page.wait_for_timeout(800)
     assert page.evaluate("window.__quit") == True, "quit button does not call quit"
     assert not errors, f"JS errors: {errors}"
     print("✓ happy path ok (panels, toggle, navigation, quit button)")

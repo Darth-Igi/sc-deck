@@ -1,6 +1,7 @@
 import { Box, IconButton, Typography } from "@mui/material";
-import { useDeckStore } from "./../store";
-import { hud } from "./../theme";
+import { useDeckStore } from "../store";
+import { hud } from "../theme";
+import { HOLD_MS, useLongPress } from "../useLongPress";
 
 // Paging bar styled after the < TITLE > bars in the game
 export default function PageNav() {
@@ -9,6 +10,13 @@ export default function PageNav() {
   const nextPage = useDeckStore((s) => s.nextPage);
   const prevPage = useDeckStore((s) => s.prevPage);
   const quit = useDeckStore((s) => s.quit);
+  const resetToggles = useDeckStore((s) => s.resetToggles);
+
+  // Quit and reset are guarded by a long press (accidental palm touches on
+  // the Edge must not quit the app or wipe the assumed toggle states).
+  // While holding, the button "charges up" via a linear background fill.
+  const resetHold = useLongPress(resetToggles);
+  const quitHold = useLongPress(quit);
 
   const page = pages[currentPageIndex];
 
@@ -23,6 +31,19 @@ export default function PageNav() {
     "&:active": { background: hud.glow },
   };
 
+  // Charging feedback for long-press buttons: background fills over the
+  // hold duration, snaps back quickly when released early.
+  const holdSx = (holding, color, fill) => ({
+    ...arrowSx,
+    color,
+    borderColor: fill,
+    background: holding ? fill : "transparent",
+    transition: holding
+      ? `background-color ${HOLD_MS}ms linear`
+      : "background-color 120ms ease",
+    "&:active": {}, // handled by the charging fill instead
+  });
+
   return (
     <Box
       sx={{
@@ -34,6 +55,17 @@ export default function PageNav() {
         pb: 2,
       }}
     >
+      {/* Manual reset, mirroring the quit button on the far right:
+          resets all toggles to their config "initial" values without
+          sending keys (see store.resetToggles). Long press to trigger. */}
+      <IconButton
+        sx={holdSx(resetHold.holding, hud.warn, "rgba(255,196,0,0.4)")}
+        {...resetHold.handlers}
+        aria-label="Reset toggles"
+      >
+        {"⟲"}
+      </IconButton>
+
       <IconButton sx={arrowSx} onPointerDown={prevPage} aria-label="Previous page">
         {"‹"}
       </IconButton>
@@ -68,8 +100,8 @@ export default function PageNav() {
       </IconButton>
 
       <IconButton
-        sx={{ ...arrowSx, height: 56, width: 64, borderColor: "rgba(255,77,77,0.4)", color: hud.danger }}
-        onPointerDown={quit}
+        sx={holdSx(quitHold.holding, hud.danger, "rgba(255,77,77,0.4)")}
+        {...quitHold.handlers}
         aria-label="Quit app"
       >
         {"⏻"}

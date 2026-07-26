@@ -1,9 +1,13 @@
-import { Box, FormControlLabel, styled, Switch, Typography } from '@mui/material'
-import { useDeckStore } from './../store'
-import { hud } from './../theme'
+import { FormControlLabel, styled, Switch } from '@mui/material'
+import { useDeckStore } from '../store'
+import { hud } from '../theme'
 
 
-const ToggleSwitch = styled(Switch)(({ theme }) => ({
+// `accent` (per-widget color from the config, e.g. a red WPN safety) is a
+// styling-only prop and must not leak onto the DOM element.
+const ToggleSwitch = styled(Switch, {
+  shouldForwardProp: (prop) => prop !== 'accent',
+})(({ theme, accent = hud.active }) => ({
   width: 96,
   height: 48,
   padding: 0,
@@ -28,8 +32,8 @@ const ToggleSwitch = styled(Switch)(({ theme }) => ({
         }),
       },
       '& .MuiSwitch-thumb': {
-        backgroundColor: hud.active,
-        boxShadow: `0 0 6px 3px ${hud.active}`,
+        backgroundColor: accent,
+        boxShadow: `0 0 6px 3px ${accent}`,
         width: 40,
         height: 40,
         borderRadius: 20,
@@ -39,7 +43,7 @@ const ToggleSwitch = styled(Switch)(({ theme }) => ({
   },
   '& .MuiSwitch-thumb': {
     backgroundColor: hud.glow,
-    border: `2px solid ${hud.active}`,
+    border: `2px solid ${accent}`,
     width: 44,
     height: 44,
     borderRadius: 22,
@@ -63,76 +67,40 @@ const ToggleSwitch = styled(Switch)(({ theme }) => ({
 
 
 // Toggle styled after the ON/OFF switches in the cockpit (WPN, HEAT,
-// OVRCLK): pill button that stays filled while on, with an ON/OFF label
-// below. Note: the state is purely local ("assumed") - the game does not
+// OVRCLK). Note: the state is purely local ("assumed") - the game does not
 // report anything back.
+//
+// Triggered on POINTERDOWN (like the momentary buttons), not onChange:
+// onChange rides on the click event, which can add touch latency and was
+// inconsistent with the rest of the deck. The handler sits on the
+// FormControlLabel so a tap on the label text works too. The Switch itself
+// is fully controlled (checked from the store, noop onChange - the click
+// that follows our pointerdown must not toggle a second time).
 export default function ToggleWidget({ widget }) {
   const triggerToggle = useDeckStore((s) => s.triggerToggle)
   const isOn = useDeckStore((s) => Boolean(s.toggleStates[widget.id]))
-  // const pressed = useDeckStore((s) => s.pressedId === widget.id);
   const hasError = useDeckStore((s) => s.errorId === widget.id)
 
   const accent = widget.accent || hud.active
 
   return (
     <FormControlLabel
+      onPointerDown={() => triggerToggle(widget)}
       control={<ToggleSwitch
         checked={isOn}
-        onChange={() => triggerToggle(widget)}
+        onChange={() => {}}
+        accent={accent}
+        // Error feedback got lost in the Box->Switch redesign: make a
+        // failed hotkey dispatch visible on the widget itself again
+        sx={hasError ? {
+          '& .MuiSwitch-track': {
+            borderColor: hud.danger,
+            boxShadow: `0 0 12px ${hud.danger}`,
+          },
+        } : undefined}
       />}
       label={widget.label}
       labelPlacement="bottom"
     />
-
-
-    // <Box
-    //   onPointerDown={() => triggerToggle(widget)}
-    //   sx={{
-    //     display: "flex",
-    //     flexDirection: "column",
-    //     alignItems: "center",
-    //     gap: 0.4,
-    //     userSelect: "none",
-    //     cursor: "pointer",
-    //   }}
-    // >
-    //   <Box
-    //     sx={{
-    //       width: "100%",
-    //       minHeight: 44,
-    //       borderRadius: "22px",
-    //       display: "flex",
-    //       alignItems: "center",
-    //       justifyContent: "center",
-    //       border: hasError
-    //         ? `2px solid ${hud.danger}`
-    //         : `1.5px solid ${isOn ? accent : hud.lineDim}`,
-    //       background: isOn ? accent : "rgba(87, 217, 255, 0.06)",
-    //       color: isOn ? hud.activeText : hud.text,
-    //       fontSize: "0.85rem",
-    //       fontWeight: 700,
-    //       letterSpacing: "0.12em",
-    //       textTransform: "uppercase",
-    //       boxShadow: isOn ? `0 0 14px ${accent}` : "none",
-    //       transform: pressed ? "scale(0.95)" : "scale(1)",
-    //       transition:
-    //         "background 0.1s ease, box-shadow 0.1s ease, transform 0.06s ease",
-    //       px: 1,
-    //       textAlign: "center",
-    //     }}
-    //   >
-    //     {widget.label}
-    //   </Box>
-    //   <Typography
-    //     sx={{
-    //       fontSize: "0.55rem",
-    //       letterSpacing: "0.2em",
-    //       color: isOn ? accent : hud.textDim,
-    //       fontWeight: 600,
-    //     }}
-    //   >
-    //     {isOn ? "ON" : "OFF"}
-    //   </Typography>
-    // </Box>
   )
 }

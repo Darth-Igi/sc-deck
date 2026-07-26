@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
-import { useDeckStore } from "./../store";
-import { hud } from "./../theme";
+import { useDeckStore } from "../store";
+import { hud } from "../theme";
 import Panel from "./../component/Panel";
 import PageNav from "./../component/PageNav";
 import StatusBar from "./../component/StatusBar";
@@ -14,6 +14,8 @@ export default function App() {
   const loadConfig = useDeckStore((s) => s.loadConfig);
   const quit = useDeckStore((s) => s.quit);
 
+  const handleGameEvent = useDeckStore((s) => s.handleGameEvent);
+
   useEffect(() => {
     loadConfig();
     // Config hot reload: reload when config.json changes.
@@ -22,6 +24,15 @@ export default function App() {
       return window.scDeck.onConfigChanged(() => loadConfig());
     }
   }, [loadConfig]);
+
+  useEffect(() => {
+    // Game.log events (vehicle change, destruction, death, restart) -> may
+    // reset/restore toggle states. Optional: only present when the main
+    // process has the watcher enabled (config.gamelog.enabled).
+    if (window.scDeck.onGameEvent) {
+      return window.scDeck.onGameEvent((event) => handleGameEvent(event));
+    }
+  }, [handleGameEvent]);
 
   const centered = {
     height: "100vh",

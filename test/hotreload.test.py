@@ -36,7 +36,7 @@ with sync_playwright() as p:
     pg.wait_for_timeout(1200)
 
     # Turn on the OVRCLK toggle (initially false) and go to page 2
-    pg.get_by_text("OVRCLK", exact=True).dispatch_event("pointerdown")
+    pg.locator('label:has-text("OVRCLK")').dispatch_event("pointerdown")
     pg.wait_for_timeout(200)
     pg.locator('[aria-label="Next page"]').dispatch_event("pointerdown")
     pg.wait_for_timeout(300)
@@ -53,8 +53,9 @@ with sync_playwright() as p:
     pg.locator('[aria-label="Previous page"]').dispatch_event("pointerdown")
     pg.wait_for_timeout(300)
     assert pg.get_by_text("NEW", exact=True).count() > 0, "new widget missing after hot reload"
-    on_label = pg.locator("div", has_text="OVRCLK").locator("p", has_text="ON")
-    assert on_label.count() > 0, "OVRCLK toggle state lost during hot reload"
+    # ToggleWidget is a MUI Switch now: assert the checked state directly
+    assert pg.locator('label:has-text("OVRCLK") input[type=checkbox]').is_checked(), \
+        "OVRCLK toggle state lost during hot reload"
 
     assert not errors, f"JS errors: {errors}"
     print("✓ hot reload: config applied, page and toggle state preserved")

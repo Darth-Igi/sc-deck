@@ -1,4 +1,10 @@
 {
+  "gamelog": {
+    "enabled": true,
+    "path": "G:\\Spiele\\Roberts Space Industries\\StarCitizen\\LIVE\\Game.log",
+    "pollMs": 750,
+    "playerName": "Admiral-Chaos"
+  },
   "pages": [
     {
       "id": "ship",
@@ -41,7 +47,7 @@
         {
           "id": "doors",
           "title": "DOORS",
-          "columns": 3,
+          "columns": 2,
           "widgets": [
             {
               "type": "toggle",
@@ -62,40 +68,6 @@
                 "D"
               ],
               "initial": true
-            },
-            {
-              "type": "toggle",
-              "id": "dr-port-lock",
-              "label": "PINC",
-              "keys": [
-                "RightAlt",
-                "K"
-              ],
-              "initial": false
-            },
-            {
-              "type": "button",
-              "id": "tgt-pin1",
-              "label": "PIN 1",
-              "keys": [
-                "Num1"
-              ]
-            },
-            {
-              "type": "button",
-              "id": "tgt-pin2",
-              "label": "PIN 2",
-              "keys": [
-                "Num2"
-              ]
-            },
-            {
-              "type": "button",
-              "id": "tgt-pin3",
-              "label": "PIN 3",
-              "keys": [
-                "Num3"
-              ]
             }
           ]
         },
@@ -133,7 +105,7 @@
             {
               "type": "button",
               "id": "slf-dest",
-              "label": "SLF DEST",
+              "label": "SELF DESTRUCT",
               "keys": [
                 "Backspace"
               ],
