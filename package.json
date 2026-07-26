@@ -1,6 +1,6 @@
 {
   "name": "sc-deck",
-  "version": "2.7.0",
+  "version": "2.9.0",
   "description": "Custom touch control surface for the CORSAIR XENEON EDGE (React + Zustand + MUI); sends key combinations to the system (e.g. for Star Citizen)",
   "main": "main.js",
   "scripts": {
@@ -15,7 +15,6 @@
     "@emotion/styled": "^11.13.0",
     "@mui/icons-material": "^5.16.0",
     "@mui/material": "^5.16.0",
-    "@nut-tree-fork/nut-js": "^4.2.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zustand": "^4.5.0",

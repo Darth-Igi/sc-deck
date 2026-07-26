@@ -1,7 +1,7 @@
 // Mini test suite without a framework: node test/configValidation.test.js
 const assert = require("assert");
 const { validateConfig } = require("../configValidation");
-const { Key } = require("@nut-tree-fork/nut-js");
+const { SCANCODE_KEY_NAMES: Key } = require("../scancodeSender");
 const fs = require("fs");
 
 let passed = 0;

@@ -32,11 +32,37 @@ with sync_playwright() as p:
     page.wait_for_timeout(1200)
 
     assert page.get_by_text("SAFETIES").count() > 0, "panel SAFETIES missing"
-    # Toggles trigger on POINTERDOWN on the FormControlLabel (consistent
-    # with the momentary buttons, no click latency)
-    page.locator('label:has-text("OVRCLK")').dispatch_event("pointerdown")
+    # Toggles fire on RELEASE (tap) since the long-press correction was
+    # added - a bare pointerdown must NOT trigger anymore.
+    ovr_label = page.locator('label:has-text("OVRCLK")')
+    ovr_label.dispatch_event("pointerdown")
+    page.wait_for_timeout(150)
+    assert page.evaluate("window.__lastKeys") is None, "pointerdown alone must not send"
+    ovr_label.dispatch_event("pointerup")
     page.wait_for_timeout(200)
     assert page.evaluate("window.__lastKeys") == ["F7"], "toggle sends wrong keys"
+
+    # Long press on the toggle = manual state correction: flips the local
+    # assumed state WITHOUT sending keys (drift correction, e.g. after a
+    # ship power-off). OVRCLK is ON after the tap above -> hold flips OFF.
+    ovrclk = page.locator('label:has-text("OVRCLK") input[type=checkbox]')
+    assert ovrclk.is_checked(), "OVRCLK should be on after the tap above"
+    page.evaluate("window.__lastKeys = null")
+    ovr_label.dispatch_event("pointerdown")
+    page.wait_for_timeout(800)  # held past the 600ms threshold
+    assert not ovrclk.is_checked(), "long press did not flip the state"
+    assert page.evaluate("window.__lastKeys") is None, "correction must not send keys"
+    ovr_label.dispatch_event("pointerup")  # release after hold = no-op
+    page.wait_for_timeout(200)
+    assert not ovrclk.is_checked(), "release after hold must not tap-toggle"
+    assert page.evaluate("window.__lastKeys") is None, "release after hold must not send"
+    assert page.get_by_text("MANUAL: OVRCLK").count() > 0, "status bar misses manual correction"
+    # Flip it back ON via long press so the reset test below still starts
+    # from the same state as before this feature existed.
+    ovr_label.dispatch_event("pointerdown")
+    page.wait_for_timeout(800)
+    ovr_label.dispatch_event("pointerup")
+    print("✓ toggle ok (tap on release, long press corrects without keys)")
 
     # Reset button (far left): OVRCLK was just toggled on (initial: false).
     # Guarded by LONG PRESS: a short tap must do nothing; holding >600ms

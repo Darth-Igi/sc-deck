@@ -6,7 +6,7 @@ const VALID_TYPES = ["button", "toggle"];
 /**
  * Checks config structure, key names, and duplicate IDs.
  * @param {object} config - parsed config.json
- * @param {object} keyEnum - the Key enum from @nut-tree-fork/nut-js
+ * @param {object} keyEnum - map of valid key names (SCANCODE_KEY_NAMES)
  * @returns {{ errors: string[], warnings: string[] }}
  */
 function validateConfig(config, keyEnum) {
@@ -125,7 +125,7 @@ function validateConfig(config, keyEnum) {
               !Object.prototype.hasOwnProperty.call(keyEnum, k)
             ) {
               errors.push(
-                `${wRef}: unknown key "${k}" - see the nut.js Key enum for valid names (e.g. "LeftControl", "F5", "N").`
+                `${wRef}: unknown key "${k}" - see SCANCODES in scancodeSender.js for valid names (e.g. "LeftControl", "F5", "N").`
               );
             }
           }

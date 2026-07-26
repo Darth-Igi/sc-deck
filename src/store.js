@@ -153,7 +153,7 @@ export const useDeckStore = create((set, get) => ({
   },
 
   // Toggle: state only flips on successful dispatch, so the UI and the
-  // (assumed) game state don't drift apart when nut.js fails.
+  // (assumed) game state don't drift apart when key dispatch fails.
   triggerToggle: async (widget) => {
     const ok = await get()._sendKeys(widget);
     if (ok) {
@@ -187,4 +187,21 @@ export const useDeckStore = create((set, get) => ({
     set((state) => ({
       toggleStates: { ...state.toggleStates, [widgetId]: value },
     })),
+
+  // Long press on a toggle: flip the LOCAL assumed state WITHOUT sending
+  // any keys. Covers per-widget drift (ship power-off resets components
+  // in-game, keys pressed on the physical keyboard) without the shotgun
+  // of a full manual reset. Reported in the status bar so an accidental
+  // hold is noticeable.
+  correctToggle: (widget) =>
+    set((state) => {
+      const next = !state.toggleStates[widget.id];
+      return {
+        toggleStates: { ...state.toggleStates, [widget.id]: next },
+        gameStatus: {
+          message: `MANUAL: ${widget.label} → ${next ? "ON" : "OFF"}`,
+          time: new Date().toLocaleTimeString(),
+        },
+      };
+    }),
 }));

@@ -37,6 +37,8 @@ with sync_playwright() as p:
 
     # Turn on the OVRCLK toggle (initially false) and go to page 2
     pg.locator('label:has-text("OVRCLK")').dispatch_event("pointerdown")
+    pg.wait_for_timeout(80)
+    pg.locator('label:has-text("OVRCLK")').dispatch_event("pointerup")
     pg.wait_for_timeout(200)
     pg.locator('[aria-label="Next page"]').dispatch_event("pointerdown")
     pg.wait_for_timeout(300)

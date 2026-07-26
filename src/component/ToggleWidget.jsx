@@ -1,6 +1,7 @@
 import { FormControlLabel, styled, Switch } from '@mui/material'
 import { useDeckStore } from '../store'
 import { hud } from '../theme'
+import { HOLD_MS, useTapOrHold } from '../useLongPress'
 
 
 // `accent` (per-widget color from the config, e.g. a red WPN safety) is a
@@ -70,34 +71,57 @@ const ToggleSwitch = styled(Switch, {
 // OVRCLK). Note: the state is purely local ("assumed") - the game does not
 // report anything back.
 //
-// Triggered on POINTERDOWN (like the momentary buttons), not onChange:
-// onChange rides on the click event, which can add touch latency and was
-// inconsistent with the rest of the deck. The handler sits on the
-// FormControlLabel so a tap on the label text works too. The Switch itself
-// is fully controlled (checked from the store, noop onChange - the click
-// that follows our pointerdown must not toggle a second time).
+// Interaction (changed for the long-press correction feature):
+// - TAP (release before HOLD_MS): send keys + flip assumed state. Fires on
+//   pointerUP now, not pointerdown - hold detection needs the release.
+//   Slightly more latency than the momentary buttons, accepted trade-off.
+// - HOLD (>= HOLD_MS): flip the assumed state WITHOUT sending keys -
+//   manual drift correction (ship power-off, physical keyboard presses).
+//   While holding, the track charges amber (same color language as the
+//   reset button in the nav bar).
+// The handlers sit on the FormControlLabel so the label text works too.
+// The Switch itself is fully controlled (checked from the store, noop
+// onChange - the click after our pointer events must not toggle again).
 export default function ToggleWidget({ widget }) {
   const triggerToggle = useDeckStore((s) => s.triggerToggle)
+  const correctToggle = useDeckStore((s) => s.correctToggle)
   const isOn = useDeckStore((s) => Boolean(s.toggleStates[widget.id]))
   const hasError = useDeckStore((s) => s.errorId === widget.id)
 
+  const { holding, handlers } = useTapOrHold(
+    () => triggerToggle(widget),
+    () => correctToggle(widget),
+  )
+
   const accent = widget.accent || hud.active
+
+  // Error beats holding: a failed dispatch must stay visible even while
+  // the user is already pressing again.
+  const trackSx = hasError
+    ? {
+        '& .MuiSwitch-track': {
+          borderColor: hud.danger,
+          boxShadow: `0 0 12px ${hud.danger}`,
+        },
+      }
+    : holding
+      ? {
+          '& .MuiSwitch-track': {
+            borderColor: hud.warn,
+            boxShadow: `0 0 12px ${hud.warn}`,
+            transition: `box-shadow ${HOLD_MS}ms ease-in, border-color ${HOLD_MS}ms ease-in`,
+          },
+        }
+      : undefined
 
   return (
     <FormControlLabel
-      onPointerDown={() => triggerToggle(widget)}
+      {...handlers}
       control={<ToggleSwitch
         checked={isOn}
         onChange={() => {}}
         accent={accent}
-        // Error feedback got lost in the Box->Switch redesign: make a
-        // failed hotkey dispatch visible on the widget itself again
-        sx={hasError ? {
-          '& .MuiSwitch-track': {
-            borderColor: hud.danger,
-            boxShadow: `0 0 12px ${hud.danger}`,
-          },
-        } : undefined}
+        sx={trackSx}
       />}
       label={widget.label}
       labelPlacement="bottom"

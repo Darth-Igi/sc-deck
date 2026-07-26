@@ -14,25 +14,14 @@ const {
   DEFAULT_LOG_PATH,
 } = require("./gamelog");
 
-// Load nut.js right at startup: if the native module fails to load,
-// remember the error and surface it in the UI instead of dying on the
-// first key press.
-let nut = null;
-let nutLoadError = null;
-try {
-  nut = require("@nut-tree-fork/nut-js");
-  nut.keyboard.config.autoDelayMs = 20;
-} catch (err) {
-  nutLoadError = `Failed to load nut.js: ${err.message}`;
-  console.error(nutLoadError);
-}
-
-// Scancode sender (SendInput with KEYEVENTF_SCANCODE): preferred dispatch
-// path. nut.js sends virtual keys without the extended-key flag, so games
-// reading raw scancodes (Star Citizen) see RightControl/RightAlt as the
-// LEFT variant. Initialized eagerly for the same fail-fast reason as
-// nut.js above; nut.js stays as fallback for keys without a scancode
-// mapping (e.g. Pause) and for non-Windows dev machines.
+// Key dispatch: SendInput with KEYEVENTF_SCANCODE (see scancodeSender.js).
+// Replaces the former nut.js path entirely - nut.js sent virtual keys
+// without the extended-key flag, so games reading raw scancodes (Star
+// Citizen) saw RightControl/RightAlt as the LEFT variant. Initialized
+// eagerly: if the native part (koffi) fails to load, remember the error
+// and surface it in the UI instead of dying on the first key press.
+// On non-Windows dev machines the sender stays null - the UI runs, key
+// dispatch errors into the status bar.
 const {
   createScancodeSender,
   SCANCODE_KEY_NAMES,
@@ -48,6 +37,8 @@ if (process.platform === "win32") {
     scancodeLoadError = `Failed to init scancode sender: ${err.message}`;
     console.error(scancodeLoadError);
   }
+} else {
+  scancodeLoadError = "Key dispatch is Windows-only (dev mode?)";
 }
 
 let mainWindow;
@@ -89,18 +80,11 @@ function loadConfigSafe() {
     return { ok: false, path: activePath, errors: [`JSON error: ${err.message}`] };
   }
 
-  // Valid key names = union of both dispatch paths. With the scancode
-  // sender available, a broken nut.js is downgraded to a warning: every
-  // key the validator then still accepts is scancode-mappable and works.
-  const keyEnum = {
-    ...(scancodeSender ? SCANCODE_KEY_NAMES : {}),
-    ...(nut ? nut.Key : {}),
-  };
-  const { errors, warnings } = validateConfig(config, keyEnum);
-  if (nutLoadError) {
-    if (scancodeSender) warnings.unshift(`${nutLoadError} (scancode sender active, unmapped keys would fail)`);
-    else errors.unshift(nutLoadError);
-  }
+  // Key names are validated against the scancode table - platform-
+  // independent, so config editing on a dev machine validates identically.
+  // A failed sender init is a warning: config and UI still work, only
+  // dispatch will error (visible in the status bar per press).
+  const { errors, warnings } = validateConfig(config, SCANCODE_KEY_NAMES);
   if (scancodeLoadError) warnings.unshift(scancodeLoadError);
 
   if (errors.length > 0) {
@@ -278,28 +262,15 @@ ipcMain.handle("quit-app", () => app.quit());
 let hotkeyQueue = Promise.resolve();
 
 async function doSendKeys(keys) {
-  // Preferred path: scancodes with correct extended-key flags. All-or-
-  // nothing per combo - mixing both senders within one chord could
-  // interleave on the system input queue.
-  if (scancodeSender && canSendViaScancodes(keys)) {
-    await scancodeSender.sendCombo(keys);
-    return;
+  if (!scancodeSender) {
+    throw new Error(scancodeLoadError || "Key dispatch not available");
   }
-
-  if (!nut) throw new Error(nutLoadError || "nut.js not available");
-  const { keyboard, Key } = nut;
-
-  const keyConstants = keys.map((k) => {
-    // hasOwnProperty, not `in`: `in` also matches prototype members like
-    // "toString", which would pass validation and then blow up in nut.js
-    if (!Object.prototype.hasOwnProperty.call(Key, k)) {
-      throw new Error(`Unknown key: ${k}`);
-    }
-    return Key[k];
-  });
-
-  await keyboard.pressKey(...keyConstants);
-  await keyboard.releaseKey(...keyConstants);
+  if (!canSendViaScancodes(keys)) {
+    // Validation catches this for config-defined keys; this guards the
+    // raw IPC input (a compromised renderer could send arbitrary strings).
+    throw new Error(`Unknown key(s): ${keys.join(", ")}`);
+  }
+  await scancodeSender.sendCombo(keys);
 }
 
 ipcMain.handle("send-hotkey", (_event, keys) => {
