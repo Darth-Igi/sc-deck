@@ -109,7 +109,7 @@
               "keys": [
                 "Backspace"
               ],
-              "accent": "#ff4d4d"
+              "accent": "danger"
             }
           ]
         }

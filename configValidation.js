@@ -114,6 +114,15 @@ function validateConfig(config, keyEnum) {
           );
         }
 
+        // "accent": color role of the ship theme ("danger", "warn", "active",
+        // "line" ...) or a fixed CSS color ("#ff4d4d"). Roles are resolved
+        // in the renderer (src/themes), so only the type is checked here.
+        if (w?.accent !== undefined && (typeof w.accent !== "string" || !w.accent.trim())) {
+          errors.push(
+            `${wRef}: "accent" must be a color role (e.g. "danger") or a CSS color (e.g. "#ff4d4d").`
+          );
+        }
+
         if (!Array.isArray(w?.keys) || w.keys.length === 0) {
           errors.push(`${wRef}: "keys" is missing or empty.`);
         } else {

@@ -43,6 +43,13 @@ test("valid modifiers pass", () => {
   assert.deepStrictEqual(errors, []);
 });
 
+test("accent: role names and CSS colors pass, non-strings fail", () => {
+  assert.deepStrictEqual(validateConfig(wrap([widget({ accent: "danger" })]), Key).errors, []);
+  assert.deepStrictEqual(validateConfig(wrap([widget({ accent: "#ff4d4d" })]), Key).errors, []);
+  assert.ok(validateConfig(wrap([widget({ accent: 42 })]), Key).errors.some((e) => e.includes("accent")));
+  assert.ok(validateConfig(wrap([widget({ accent: " " })]), Key).errors.some((e) => e.includes("accent")));
+});
+
 test("duplicate widget IDs are detected", () => {
   const { errors } = validateConfig(wrap([widget(), widget({ label: "W2" })]), Key);
   assert.ok(errors.some((e) => e.includes("duplicate ID")));

@@ -22,16 +22,22 @@ export const useDeckStore = create((set, get) => ({
   toggleStates: {},    // { [widgetId]: boolean } - local "assumed" state
 
   // ---- Game.log tracking (see src/gameEvents.js) ----
-  currentVehicleId: null,    // ship instance we are (assumed to be) in
-  currentVehicleClass: null, // e.g. "AEGS_Gladius" - shown in the status bar
+  currentVehicleId: null,    // ship key "<class>:<owner>" we are (assumed to be) in
+  currentVehicleClass: null, // e.g. "MISC_Starlancer_TAC" - selects the ship theme
+  currentVehicleName: null,  // e.g. "MISC Starlancer TAC" - shown in the status bar
   vehicleMemory: {},         // { [vehicleId]: toggleStates } per-ship memory
   gameStatus: null,          // { message, time } last game event, status bar
   gamelogState: null,        // "watching" | "missing" - tailer status
 
+  // Dev-only theme preview (StatusBar picker, `npm run dev`): a vehicle
+  // class that overrides the detected ship for theming only.
+  themePreview: null,
+  setThemePreview: (vehicleClass) => set({ themePreview: vehicleClass }),
+
   // Semantic events from the main process (Game.log watcher). Toggle
-  // states survive standing up / re-entering the SAME ship (no event is
-  // emitted for that); a different ship instance, destruction, death or a
-  // game restart resets them to the config's "initial" values.
+  // states are remembered per ship and restored on re-boarding; a freshly
+  // retrieved instance, destruction, death or a game restart resets them
+  // to the config's "initial" values.
   handleGameEvent: (event) => {
     if (event.type === "gamelog-status") {
       set({ gamelogState: event.state });

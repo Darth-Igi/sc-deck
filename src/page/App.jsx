@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Box, CircularProgress, Typography } from "@mui/material";
 import { useDeckStore } from "../store";
-import { hud } from "../theme";
+import { useShipTheme } from "../themes/ShipThemeProvider";
 import Panel from "./../component/Panel";
 import PageNav from "./../component/PageNav";
 import StatusBar from "./../component/StatusBar";
@@ -13,6 +13,8 @@ export default function App() {
   const configError = useDeckStore((s) => s.configError);
   const loadConfig = useDeckStore((s) => s.loadConfig);
   const quit = useDeckStore((s) => s.quit);
+  const ship = useShipTheme();
+  const hud = ship.colors;
 
   const handleGameEvent = useDeckStore((s) => s.handleGameEvent);
 
@@ -95,13 +97,18 @@ export default function App() {
   }
 
   const page = pages[currentPageIndex];
+  const { art } = ship;
 
   return (
     <Box
       sx={{
+        position: "relative",
         height: "100vh",
         width: "100vw",
         bgcolor: "background.default",
+        // ship theme decoration layered over the deck color
+        ...(art.background ? { background: `${art.background}, ${hud.bg}` } : {}),
+        transition: `background-color ${ship.transitionMs}ms ease`,
         display: "flex",
         flexDirection: "column",
         gap: 1.5,
@@ -109,6 +116,21 @@ export default function App() {
         boxSizing: "border-box",
       }}
     >
+      {art.logo && (
+        <Box
+          component="img"
+          src={art.logo}
+          alt=""
+          sx={{
+            position: "absolute",
+            right: 24,
+            bottom: 28,
+            height: 120,
+            opacity: art.logoOpacity,
+            pointerEvents: "none",
+          }}
+        />
+      )}
       <PageNav />
 
       {/* Weight panel widths by column count, minimum factor 1 */}

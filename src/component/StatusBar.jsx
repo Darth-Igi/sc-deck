@@ -1,22 +1,56 @@
 import { Box, Typography } from "@mui/material";
 import { useDeckStore } from "../store";
-import { hud } from "../theme";
+import { useShipTheme } from "../themes/ShipThemeProvider";
+import { SHIP_THEMES } from "../themes/registry";
+
+// Dev-only (`npm run dev`, stripped from production builds): tap cycles
+// the theme preview through DEFAULT and every registered ship theme, so
+// themes can be designed without the game. The window is not focusable,
+// hence a touch control instead of a keyboard shortcut.
+const PREVIEW_CYCLE = [null, ...Object.keys(SHIP_THEMES)];
+
+function DevThemePicker() {
+  const themePreview = useDeckStore((s) => s.themePreview);
+  const setThemePreview = useDeckStore((s) => s.setThemePreview);
+  const hud = useShipTheme().colors;
+  const next = () => {
+    const i = PREVIEW_CYCLE.indexOf(themePreview);
+    setThemePreview(PREVIEW_CYCLE[(i + 1) % PREVIEW_CYCLE.length]);
+  };
+  return (
+    <Box
+      onPointerDown={next}
+      sx={{
+        border: `1px dashed ${hud.warn}`,
+        color: hud.warn,
+        fontSize: "0.6rem",
+        letterSpacing: "0.15em",
+        px: 1.5,
+        cursor: "pointer",
+        userSelect: "none",
+      }}
+    >
+      DEV THEME: {themePreview ?? "SHIP / DEFAULT"} ▸
+    </Box>
+  );
+}
 
 // Slim status bar: makes the last error visible - there is no console
 // on the Edge while running fullscreen.
 export default function StatusBar() {
   const lastError = useDeckStore((s) => s.lastError);
   const gameStatus = useDeckStore((s) => s.gameStatus);
-  const currentVehicleClass = useDeckStore((s) => s.currentVehicleClass);
+  const currentVehicleName = useDeckStore((s) => s.currentVehicleName);
   const gamelogState = useDeckStore((s) => s.gamelogState);
+  const hud = useShipTheme().colors;
 
   // Game.log info: current ship if known, otherwise the last event;
   // "missing" warns that the log file was not found (wrong path / game off).
   let gameInfo = null;
   if (gamelogState === "missing") {
     gameInfo = "GAME.LOG NOT FOUND";
-  } else if (currentVehicleClass) {
-    gameInfo = `SHIP: ${currentVehicleClass}`;
+  } else if (currentVehicleName) {
+    gameInfo = `SHIP: ${currentVehicleName}`;
   } else if (gameStatus) {
     gameInfo = gameStatus.message;
   }
@@ -35,6 +69,7 @@ export default function StatusBar() {
         SC DECK · QUIT: CTRL+ALT+Q OR ⏻
         {gameInfo ? ` · ${gameInfo}` : ""}
       </Typography>
+      {import.meta.env.DEV && <DevThemePicker />}
       {lastError && (
         <Typography sx={{ fontSize: "0.6rem", letterSpacing: "0.1em", color: hud.danger }}>
           [{lastError.time}] {lastError.message}

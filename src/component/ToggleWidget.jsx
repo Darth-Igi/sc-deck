@@ -1,6 +1,7 @@
 import { FormControlLabel, styled, Switch } from '@mui/material'
 import { useDeckStore } from '../store'
-import { hud } from '../theme'
+import { useShipTheme } from '../themes/ShipThemeProvider'
+import { themeColor } from '../themes/resolve'
 import { HOLD_MS, useTapOrHold } from '../useLongPress'
 
 
@@ -8,63 +9,83 @@ import { HOLD_MS, useTapOrHold } from '../useLongPress'
 // styling-only prop and must not leak onto the DOM element.
 const ToggleSwitch = styled(Switch, {
   shouldForwardProp: (prop) => prop !== 'accent',
-})(({ theme, accent = hud.active }) => ({
-  width: 96,
-  height: 48,
-  padding: 0,
-  display: 'flex',
-  '&:active': {
-    '& .MuiSwitch-thumb': {
-      width: 56,
-    },
-    '& .MuiSwitch-switchBase.Mui-checked': {
-      transform: 'translateX(18px)',
-    },
-  },
-  '& .MuiSwitch-switchBase': {
-    padding: 2,
-    '&.Mui-checked': {
-      transform: 'translateX(48px)', // active position
-      '& + .MuiSwitch-track': {
-        opacity: 1,
-        backgroundColor: 'transparent',
-        ...theme.applyStyles('dark', {
-          backgroundColor: 'transparent',
-        }),
-      },
+})(({ theme, accent }) => {
+  const ship = theme.ship
+  const tg = ship.toggle
+  const hud = ship.colors
+  const c = (v) => themeColor(ship, v)
+  const on = accent || c(tg.accent)
+  // thumbs are centered in the 44px slot the switchBase provides
+  // (border-box sizing: the 2px thumb border is part of the size)
+  const offInset = (44 - tg.offThumbSize) / 2
+  const onInset = (44 - tg.onThumbSize) / 2
+  const trackGlow = tg.glow
+    ? `0 0 12px ${hud.glow}, inset 0 0 24px ${hud.innerGlow}`
+    : 'none'
+  return {
+    width: 96,
+    height: 48,
+    padding: 0,
+    display: 'flex',
+    '&:active': {
       '& .MuiSwitch-thumb': {
-        backgroundColor: accent,
-        boxShadow: `0 0 6px 3px ${accent}`,
-        width: 40,
-        height: 40,
-        borderRadius: 20,
-        margin: '2px 0 0 2px',
+        width: 56,
+      },
+      '& .MuiSwitch-switchBase.Mui-checked': {
+        transform: 'translateX(18px)',
       },
     },
-  },
-  '& .MuiSwitch-thumb': {
-    backgroundColor: hud.glow,
-    border: `2px solid ${accent}`,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    transition: theme.transitions.create(['width'], {
-      duration: 200,
-    }),
-  },
-  '& .MuiSwitch-track': {
-    borderRadius: 48 / 2,
-    border: "1px solid",
-    borderColor: hud.line,
-    boxShadow: `0 0 12px ${hud.glow}, inset 0 0 24px rgba(87,217,255,0.05)`,
-    opacity: 1,
-    backgroundColor: 'rgba(0,0,0,.25)',
-    boxSizing: 'border-box',
-    ...theme.applyStyles('dark', {
-      backgroundColor: 'transparent',
-    }),
-  },
-}))
+    '& .MuiSwitch-switchBase': {
+      padding: 2,
+      '&.Mui-checked': {
+        transform: 'translateX(48px)', // active position
+        '& + .MuiSwitch-track': {
+          opacity: 1,
+          backgroundColor: c(tg.onTrack),
+          ...(tg.onTrackBorder ? { borderColor: c(tg.onTrackBorder) } : {}),
+          ...theme.applyStyles('dark', {
+            backgroundColor: c(tg.onTrack),
+          }),
+        },
+        '& .MuiSwitch-thumb': {
+          backgroundColor: on,
+          boxShadow: tg.glow ? `0 0 6px 3px ${on}` : 'none',
+          borderColor: on,
+          width: tg.onThumbSize,
+          height: tg.onThumbSize,
+          borderRadius: tg.onThumbRadius,
+          margin: `${onInset}px 0 0 ${onInset}px`,
+        },
+      },
+    },
+    '& .MuiSwitch-thumb': {
+      backgroundColor: c(tg.offThumb),
+      border: `2px solid ${tg.offThumbBorder ? c(tg.offThumbBorder) : on}`,
+      width: tg.offThumbSize,
+      height: tg.offThumbSize,
+      borderRadius: tg.offThumbRadius,
+      margin: `${offInset}px 0 0 ${offInset}px`,
+      transition: theme.transitions.create(['width'], {
+        duration: 200,
+      }),
+    },
+    '& .MuiSwitch-track': {
+      borderRadius: tg.trackRadius,
+      border: "1px solid",
+      borderColor: c(tg.trackBorder),
+      boxShadow: trackGlow,
+      opacity: 1,
+      backgroundColor: 'rgba(0,0,0,.25)',
+      boxSizing: 'border-box',
+      transition: theme.transitions.create(['background-color', 'border-color'], {
+        duration: ship.transitionMs,
+      }),
+      ...theme.applyStyles('dark', {
+        backgroundColor: 'transparent',
+      }),
+    },
+  }
+})
 
 
 // Toggle styled after the ON/OFF switches in the cockpit (WPN, HEAT,
@@ -93,7 +114,10 @@ export default function ToggleWidget({ widget }) {
     () => correctToggle(widget),
   )
 
-  const accent = widget.accent || hud.active
+  const ship = useShipTheme()
+  const hud = ship.colors
+  // config "accent": role name (follows the ship theme) or fixed color
+  const accent = themeColor(ship, widget.accent, ship.toggle.accent)
 
   // Error beats holding: a failed dispatch must stay visible even while
   // the user is already pressing again.

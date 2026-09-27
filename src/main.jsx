@@ -1,14 +1,12 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
-import { ThemeProvider, CssBaseline } from "@mui/material";
-import { theme } from "./theme";
-import App from "./page//App";
+import ShipThemeProvider from "./themes/ShipThemeProvider";
+import App from "./page/App";
 
 ReactDOM.createRoot(document.getElementById("root")).render(
   <React.StrictMode>
-    <ThemeProvider theme={theme}>
-      <CssBaseline />
+    <ShipThemeProvider>
       <App />
-    </ThemeProvider>
+    </ShipThemeProvider>
   </React.StrictMode>
 );

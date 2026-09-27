@@ -2,10 +2,12 @@
 // the deck's toggle states. Kept free of Zustand/React so it can be
 // unit-tested with plain Node (test/gameEvents.test.mjs).
 //
-// Model: toggle state is per SHIP INSTANCE. Standing up from the seat or
-// leaving the ship on foot produces no event, so state is naturally kept.
-// Switching to a different instance resets to the config's "initial" values
-// (or restores what we remembered for that instance).
+// Model: toggle state is per SHIP, keyed by the parser's vehicleId
+// ("<class>:<owner>"). Standing up from the seat produces no event.
+// Boarding restores what we remembered for that ship, unless the parser
+// flags it as a freshly retrieved instance (fresh) - then "initial".
+// Leaving (channel left) remembers the state and falls back to "initial"
+// until the next boarding.
 
 // Initial toggle states as declared in the config
 export function initialToggleStates(pages) {
@@ -18,6 +20,21 @@ export function initialToggleStates(pages) {
     }
   }
   return states;
+}
+
+// Store fields describing the current ship (drive status bar + ship theme)
+const NO_VEHICLE = {
+  currentVehicleId: null,
+  currentVehicleClass: null,
+  currentVehicleName: null,
+};
+
+function currentVehicleFrom(event) {
+  return {
+    currentVehicleId: event.vehicleId,
+    currentVehicleClass: event.vehicleClass,
+    currentVehicleName: event.shipName || event.vehicleClass,
+  };
 }
 
 /**
@@ -35,10 +52,10 @@ export function applyGameEvent(prev, event, pages) {
       // restore what we know about the new ship or start from "initial".
       const memory = { ...vehicleMemory };
       if (currentVehicleId) memory[currentVehicleId] = { ...toggleStates };
+      if (event.fresh) delete memory[event.vehicleId]; // new instance: stale
       const restored = memory[event.vehicleId];
       return {
-        currentVehicleId: event.vehicleId,
-        currentVehicleClass: event.vehicleClass,
+        ...currentVehicleFrom(event),
         vehicleMemory: memory,
         toggleStates: restored
           ? { ...initialToggleStates(pages), ...restored }
@@ -46,16 +63,25 @@ export function applyGameEvent(prev, event, pages) {
       };
     }
 
+    case "vehicle-left": {
+      // Left the ship on foot: keep its state for the next boarding.
+      if (event.vehicleId !== currentVehicleId) return null;
+      return {
+        ...NO_VEHICLE,
+        vehicleMemory: { ...vehicleMemory, [currentVehicleId]: { ...toggleStates } },
+        toggleStates: initialToggleStates(pages),
+      };
+    }
+
     case "vehicle-destroyed": {
       // A destroyed ship's remembered state is worthless either way.
       const memory = { ...vehicleMemory };
-      delete memory[event.vehicleId];
-      if (!event.isCurrent && event.vehicleId !== currentVehicleId) {
-        return { vehicleMemory: memory }; // someone else's ship
+      if (event.vehicleId) delete memory[event.vehicleId];
+      if (!event.isCurrent) {
+        return { vehicleMemory: memory }; // someone else's / an old instance
       }
       return {
-        currentVehicleId: null,
-        currentVehicleClass: null,
+        ...NO_VEHICLE,
         vehicleMemory: memory,
         toggleStates: initialToggleStates(pages),
       };
@@ -65,16 +91,14 @@ export function applyGameEvent(prev, event, pages) {
       // We respawn elsewhere; the next boarding will fire vehicle-changed.
       // Ship memory is kept - the ship may still exist with its state.
       return {
-        currentVehicleId: null,
-        currentVehicleClass: null,
+        ...NO_VEHICLE,
         toggleStates: initialToggleStates(pages),
       };
 
     case "session-reset":
       // Game restarted: every old instance ID is invalid.
       return {
-        currentVehicleId: null,
-        currentVehicleClass: null,
+        ...NO_VEHICLE,
         vehicleMemory: {},
         toggleStates: initialToggleStates(pages),
       };
@@ -88,7 +112,9 @@ export function applyGameEvent(prev, event, pages) {
 export function describeGameEvent(event) {
   switch (event.type) {
     case "vehicle-changed":
-      return `SHIP: ${event.vehicleClass}`;
+      return `SHIP: ${event.shipName || event.vehicleClass}`;
+    case "vehicle-left":
+      return "LEFT SHIP";
     case "vehicle-destroyed":
       return event.isCurrent ? "SHIP DESTROYED - RESET" : null;
     case "player-killed":
