@@ -13,6 +13,38 @@ npm start       # builds + launches the finished app
 npm test        # unit tests for the config validation
 ```
 
+## Production build (standalone .exe)
+
+```bash
+npm run dist            # tests + renderer + installer AND portable .exe
+npm run dist:portable   # only the standalone .exe
+npm run dist:installer  # only the NSIS setup
+npm run dist:dir        # only release/win-unpacked (fast smoke test)
+```
+
+Everything lands in `release/`:
+
+| Artifact | Purpose |
+| --- | --- |
+| `sc-deck-<version>-portable.exe` | standalone, no installation - copy and run |
+| `sc-deck-<version>-setup.exe` | installer with start menu/desktop shortcut and uninstaller |
+| `win-unpacked/SC Deck.exe` | unpacked build for debugging |
+
+The build pipeline lives in `scripts/build.mjs` (`--skip-tests`,
+`--skip-clean`, `--help`), the packaging options in `electron-builder.yml`.
+Node/npm are only needed to build - the artifacts ship their own Electron
+runtime and the koffi prebuild.
+
+Two details the config takes care of, both silent failures otherwise:
+koffi stays outside `app.asar` (a `.node` cannot be loaded from an archive,
+so the app would start but never send a key), and everything except koffi
+is stripped from `node_modules` - the renderer is already bundled by Vite,
+which takes `app.asar` from 50 MB down to ~0.3 MB.
+
+For a custom application icon, drop a 256x256 `build/icon.ico` into the
+project - electron-builder picks it up automatically, otherwise the default
+Electron icon is used.
+
 ## Quitting the app
 
 The window is deliberately non-focusable (so taps never steal focus from

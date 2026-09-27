@@ -1,0 +1,61 @@
+appId: dev.scdeck.app
+productName: SC Deck
+# NOTE: productName is deliberately NOT set in package.json - Electron derives
+# app.getName() from package.json ("sc-deck"), which keeps the userData path at
+# %APPDATA%\sc-deck (see README). Changing it would orphan existing configs.
+
+directories:
+  output: release        # "dist" is the Vite renderer output, do not reuse it
+  buildResources: build  # drop an icon.ico here and it is picked up automatically
+
+asar: true
+# koffi loads its prebuilt .node binary from disk - that cannot happen from
+# inside an asar archive, so the whole package has to stay unpacked.
+asarUnpack:
+  - node_modules/koffi/**
+
+files:
+  # Main process + its plain-node modules
+  - main.js
+  - preload.js
+  - configValidation.js
+  - gamelog.js
+  - scancodeSender.js
+  # Default config, copied to userData on first launch (see main.js)
+  - config.json
+  # Renderer bundle produced by "vite build"
+  - dist/**/*
+  - package.json
+  # Sources, tests and docs are never needed at runtime
+  - "!src/**"
+  - "!test/**"
+  - "!**/*.md"
+  - "!vite.config.js"
+  # The renderer is bundled by Vite, so at runtime only koffi (loaded by the
+  # main process) is needed from node_modules. React/MUI/emotion/@babel are
+  # build-time only and would add ~48 MB of dead weight to the asar.
+  - "!node_modules/!(koffi)/**"
+  # koffi ships prebuilds for 18 platforms (~26 MB); keep only Windows x64
+  - "!node_modules/koffi/build/koffi/!(win32_x64)/**"
+  - "!node_modules/koffi/doc/**"
+
+win:
+  target:
+    - target: nsis      # classic installer
+      arch: [x64]
+    - target: portable  # single standalone .exe, no installation
+      arch: [x64]
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: SC Deck
+  uninstallDisplayName: SC Deck ${version}
+  artifactName: ${name}-${version}-setup.${ext}
+
+portable:
+  requestExecutionLevel: user
+  artifactName: ${name}-${version}-portable.${ext}

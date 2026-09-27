@@ -7,6 +7,10 @@
     "dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && cross-env ELECTRON_START_URL=http://localhost:5173 electron .\"",
     "build": "vite build",
     "start": "npm run build && electron .",
+    "dist": "node scripts/build.mjs",
+    "dist:portable": "node scripts/build.mjs --portable",
+    "dist:installer": "node scripts/build.mjs --installer",
+    "dist:dir": "node scripts/build.mjs --dir --skip-tests",
     "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/scancode.test.js",
     "test:ui": "npm run build && python3 test/render.test.py && python3 test/hotreload.test.py && python3 test/gamelog.render.test.py"
   },
@@ -15,16 +19,17 @@
     "@emotion/styled": "^11.13.0",
     "@mui/icons-material": "^5.16.0",
     "@mui/material": "^5.16.0",
+    "koffi": "^2.9.0",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
-    "zustand": "^4.5.0",
-    "koffi": "^2.9.0"
+    "zustand": "^4.5.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^8.2.0",
     "cross-env": "^7.0.3",
     "electron": "^31.0.0",
+    "electron-builder": "^26.15.3",
     "vite": "^5.4.0",
     "wait-on": "^7.2.0"
   }
