@@ -130,7 +130,17 @@ with sync_playwright() as p:
     pg.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'RSI_Apollo_Triage:P', vehicleClass:'RSI_Apollo_Triage', shipName:'RSI Apollo Triage', fresh:false})")
     pg.wait_for_timeout(500)
     assert body_bg() == "rgb(23, 29, 32)", "RSI colors must apply"
-    assert "polygon" in button_radius("SELF DESTRUCT"), "RSI_Apollo model theme: chamfered buttons"
+    assert "polygon" in button_radius("SELF DESTRUCT"), "RSI manufacturer theme: chamfered buttons"
+
+    # model theme on top of the manufacturer: Constellation is round again
+    pg.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'RSI_Constellation_Andromeda:P', vehicleClass:'RSI_Constellation_Andromeda', shipName:'RSI Constellation Andromeda', fresh:false})")
+    pg.wait_for_timeout(500)
+    assert body_bg() == "rgb(21, 22, 27)", "RSI_Constellation colors must apply"
+    assert "polygon" not in button_radius("SELF DESTRUCT"), "RSI_Constellation model theme: round buttons"
+    pg.evaluate("window.__fire({type:'vehicle-left', vehicleId:'RSI_Constellation_Andromeda:P'})")
+    pg.wait_for_timeout(300)
+    pg.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'RSI_Apollo_Triage:P', vehicleClass:'RSI_Apollo_Triage', shipName:'RSI Apollo Triage', fresh:false})")
+    pg.wait_for_timeout(500)
 
     pg.evaluate("window.__fire({type:'vehicle-left', vehicleId:'RSI_Apollo_Triage:P'})")
     pg.wait_for_timeout(500)

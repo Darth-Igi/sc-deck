@@ -1,7 +1,9 @@
-// RSI base look (derived from the Apollo MFDs, see ships/RSI_Apollo.js):
-// cool slate, white lines/text, orange and red accents. Deliberately only
-// colors + type - the distinctive shapes (cut corners, square toggles) live
-// in the Apollo theme until other RSI cockpits are confirmed to match.
+// RSI MFD look (reference: design-examples/RSI_Apollo_*.jpg and
+// RSI_Aurora_Mk_II_*.jpg - both cockpits match): cool slate, white lines/
+// text, orange and red accents, octagonal white-outlined buttons, cut-corner
+// « » bars in muted lavender, left-aligned white titles with an orange
+// marker, rectangular toggles (white = ON, red = OFF), no glow.
+// The Constellation differs and overrides this (ships/RSI_Constellation.js).
 export default {
   colors: {
     bg: "#171d20",
@@ -30,18 +32,55 @@ export default {
     family: '"Bahnschrift", "Segoe UI", sans-serif',
   },
 
+  radius: 4,
+
   panel: {
+    radius: 6,
+    titleStyle: "header",
+    titleAlign: "left",
     titleColor: "text",
+    titleSpacing: "0.08em",
+    titleMarker: "orange",
+    divider: "lineDim",
+    dividerCaps: null,
   },
 
   button: {
+    corner: "chamfer",
+    cut: 12,
+    borderWidth: 2,
     border: "line",
+    background: "surface",
     accent: "orange",
   },
 
   nav: {
+    corner: "chamfer",
+    cut: 12,
+    radius: 0,
     color: "text",
-    border: "lineDim",
+    border: "lavender",
+    arrowFill: "navFill",
+    titleBackground: "surfaceStrong",
+    titleBorder: "transparent",
     titleColor: "text",
+  },
+
+  toggle: {
+    accent: "active",
+    onTrack: "transparent",
+    offThumb: "danger",
+    offThumbBorder: "transparent",
+    trackBorder: "line",
+    trackRadius: 6,
+    offThumbSize: 30,
+    offThumbRadius: 4,
+    onThumbSize: 30,
+    onThumbRadius: 4,
+    glow: false,
+  },
+
+  art: {
+    background: "linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(0, 0, 0, 0.18))",
   },
 };

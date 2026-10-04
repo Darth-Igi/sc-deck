@@ -1,6 +1,7 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.10 (Schiffserkennung über den Schiffs-Chatkanal + Ship-Themes:
+Stand: v2.11 (Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger,
+Origin 400i/M80, RSI Aurora/Constellation; davor v2.10: Schiffserkennung über den Schiffs-Chatkanal + Ship-Themes:
 eigenes Styling pro Schiffsmodell mit Hersteller-Fallback). Dieses Dokument
 fasst zusammen, was gebaut wurde und warum, damit eine andere KI/Person ohne
 Chatverlauf weiterarbeiten kann.
@@ -73,11 +74,11 @@ sc-deck/
 │   │   ├── default.js     Default-Look (früher theme.js/"hud") + alle Slots
 │   │   ├── resolve.js     pure: Präfix-Auflösung, Merge, Farbrollen
 │   │   ├── shape.js       pure: round/chamfer-Formen als sx
-│   │   ├── registry.js    Präfix → Theme (MISC, RSI, RSI_Apollo)
+│   │   ├── registry.js    Präfix → Theme (siehe Tabelle Abschnitt 7)
 │   │   ├── ShipThemeProvider.jsx  baut MUI-Theme aus aktuellem Schiff,
 │   │   │                  Hook useShipTheme()
-│   │   ├── manufacturers/ MISC.js, RSI.js
-│   │   └── ships/         RSI_Apollo.js
+│   │   ├── manufacturers/ AEGS, ANVL, CRUS, DRAK, KRIG, MISC, ORIG, RSI
+│   │   └── ships/         ORIG_M80.js, RSI_Constellation.js
 │   ├── page/App.jsx       Lädt Config, abonniert onConfigChanged +
 │   │                      onGameEvent, Loading/Error/Normal-Zustand,
 │   │                      Theme-Hintergrund/Logo
@@ -357,12 +358,43 @@ Matching case-insensitive, nur an `_`-Grenzen.
   über `({ theme }) => theme.ship`. Farbwechsel blenden über
   `transitionMs` (300 ms) über.
 
+### Weitere Slots (v2.11, alle mit Default = bisheriger Wert, pixelgleich)
+- `font.scale` (skaliert alle rem-Größen per `html { font-size }`),
+  `font.letterSpacing` (Body + Toggle-Labels), `font.synthesis`
+  (`"none"` = kein Fake-Bold bei Ein-Gewicht-Schriften), `font.textShadow`
+  (Phosphor-Glow).
+- `button.letterSpacing`, `nav.titleSpacing`, `nav.counterColor`
+  (Seitenzähler), `nav.titleFill` (CSS-Hintergrund über
+  `titleBackground`, z. B. Schraffur), `nav.titleMarker` (Balken links,
+  per inset-Shadow → kein Layout-Shift).
+- `art.overlay`: CSS-Hintergrund **über** allem (Scanlines),
+  `pointer-events: none`.
+- **Gebündelte Schriften** (OFL, per `@fontsource/*` in `main.jsx`
+  importiert, offline): `VT323` (DRAK), `Share Tech Mono` (ANVL). Theme-
+  Dateien selbst importieren nichts (Node-Tests laden sie).
+
 ### Vorhandene Themes (Referenz: `design-examples/`)
+Grundsatz (Nutzerentscheidung v2.11): Themes gelten pro **Hersteller**,
+sobald ein Schiff als repräsentativ bestätigt ist; abweichende Cockpits
+bekommen ein Modell-Theme obendrauf.
+
 | Key | Datei | Look |
 |---|---|---|
+| `AEGS` | manufacturers/AEGS.js | Gladius = Sabre: Navy-Glas, Türkis-Linien, grau-türkise Rechteck-Buttons, Gelb = gewählt, schraffierter Titelbalken mit hellem linken Rand, Pillen-Toggles (grün an, blassblauer Punkt aus) |
+| `ANVL` | manufacturers/ANVL.js | Hornet Mk II: mintgrüner CRT, Scanlines + Glow, Share Tech Mono, eckige Buttons, Rechteck-Toggles mit quadratischem Knopf |
+| `CRUS` | manufacturers/CRUS.js | A1 Spirit: Blau, Navy-Buttons mit blauem Rand/Text, Gelb = gewählt, grauer Titelbalken. **Bewusst nicht kursiv** (Kursiv in den Screenshots ist Perspektive – Nutzer) |
+| `DRAK` | manufacturers/DRAK.js | Corsair: Bernstein-CRT, VT323 (scale 1.4), Orange/Gelb auf Oliv-Braun, Titelbalken gelb mit dunkler Schrift, eckige Toggles, Scanlines |
+| `KRIG` | manufacturers/KRIG.js | L-21 Wolf (L-22 laut Nutzer gleich; deren Screenshots sind Kopien): Schwarz/Türkis/Beige, runde Buttons mit hellem Rand, kleine Pillen-Toggles |
 | `MISC` | manufacturers/MISC.js | warmes Oliv + Punktraster, Gold (Titel/Linien mit hellen Endstücken, zentriert), Türkis (Buttons/Nav, Toggle-an-Schiene), weißer Knopf an / goldener Punkt aus, condensed, rund, kein Glow. Nutzer hat bestätigt: Starfarer sieht wie Starlancer aus → Hersteller-Theme |
-| `RSI` | manufacturers/RSI.js | nur Farben/Schrift: Schiefer, Weiß, Orange, Rot – bewusst ohne Apollo-Formen, bis andere RSI-Cockpits bestätigt sind |
-| `RSI_Apollo` | ships/RSI_Apollo.js | auf RSI: achteckige weiß umrandete Buttons, abgeschrägte Nav-Buttons (Lavendel-Grau), linksbündige Titel mit orangem Marker, eckige Toggles (weiß an, rot aus). Gilt für Medivac + Triage |
+| `ORIG` | manufacturers/ORIG.js | 400i: Formen des Default-Looks (der ursprünglich nach der 400i entstand), auf Nutzerwunsch blauer; blauer Titelbalken |
+| `ORIG_M80` | ships/ORIG_M80.js | auf ORIG: blassblau/weiß über rotem Cockpit-Schimmer, abgerundete Rechtecke, violetter Titelmarker, Gelb = gewählt, Pillen-Toggles weiß an |
+| `RSI` | manufacturers/RSI.js | Apollo = Aurora Mk II → Formen in v2.11 von `RSI_Apollo` hochgezogen (Datei gelöscht, pixelgleich): achteckige Buttons, abgeschrägte Nav, Titel mit orangem Marker, eckige Toggles (weiß an, rot aus) |
+| `RSI_Constellation` | ships/RSI_Constellation.js | Andromeda: setzt RSI-Formen zurück auf rund, Lavendel-Rahmen, `notch`-Titel wie das SCREENS/CARGO-BAY-Seitenpanel, blauer Titelbalken, Toggles orange an |
+
+Klassennamen der neuen Hersteller (ANVL, AEGS, CRUS, DRAK, KRIG, ORIG)
+sind aus `MANUFACTURER_CODES` abgeleitet und **noch nicht im echten Log
+belegt** – beim ersten Einsteigen die StatusBar (`SHIP: …`) bzw. das
+`[gamelog]`-Konsolen-Log prüfen.
 
 ### Neues Theme anlegen
 1. Datei unter `manufacturers/<CODE>.js` bzw. `ships/<Klasse>.js`, nur
@@ -422,8 +454,8 @@ Matching case-insensitive, nur an `_`-Grenzen.
 ## 10. Testing
 
 ```bash
-npm test        # 78 Unit-Tests: Config-Validierung (16), Game.log-Parser/
-                # Tailer (30), Event→Toggle-Logik (14), Ship-Themes (9),
+npm test        # 80 Unit-Tests: Config-Validierung (16), Game.log-Parser/
+                # Tailer (30), Event→Toggle-Logik (14), Ship-Themes (11),
                 # Scancode (9). Reines Node, plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -470,11 +502,10 @@ Hold ist kein zweites Toggle).
    `[gamelog] {...}` zeigt jedes Event.
 8. Hersteller-Logos/Grafiken einbauen, sobald der Nutzer sie liefert
    (`src/themes/assets/`, per `import` in `art.logo`).
-9. Weitere Ship-Themes nach Referenzbildern in `design-examples/`;
-   prüfen, ob andere RSI-Cockpits dem Apollo gleichen → dann Formen von
-   `RSI_Apollo` nach `RSI` hochziehen.
-10. Optional eigene Schriften (lokal gebündelt), falls Bahnschrift nicht
-    reicht – Nutzer hat vorerst keine Wünsche.
+9. ~~Weitere Ship-Themes~~ → v2.11 (AEGS, ANVL, CRUS, DRAK, KRIG, ORIG,
+   ORIG_M80, RSI_Constellation). Praxistest im Spiel steht aus (Klassennamen,
+   Wirkung auf dem Edge).
+10. ~~Eigene Schriften~~ → VT323 + Share Tech Mono gebündelt (v2.11).
 
 ## 12. Bisheriger Gesprächsverlauf (Kurzfassung, chronologisch)
 
@@ -524,6 +555,12 @@ Hold ist kein zweites Toggle).
     (Hersteller, Starlancer = Starfarer laut Nutzer), RSI, RSI_Apollo nach
     Referenzbildern + Dev-Theme-Wähler (Phase 3). `accent` in config.json
     akzeptiert Farbrollen. 78 Unit-Tests + 3 UI-Suiten grün.
+15. **v2.11**: Nutzer liefert Screenshots weiterer Schiffe. Rückfragen →
+    Entscheidungen: Hersteller-Themes ja, CRUS nicht kursiv, 400i blauer,
+    L-22 = L-21, Pixel-/Mono-Schriften bündeln. Neue Slots (pixelgleich
+    verifiziert), 8 neue Themes, RSI_Apollo in RSI aufgegangen (Aurora
+    gleich). 80 Unit-Tests + 3 UI-Suiten grün (UI-Suite prüft zusätzlich
+    Modell-Theme RSI_Constellation über RSI).
 
 ## 13. Hinweise für den nächsten Agenten
 

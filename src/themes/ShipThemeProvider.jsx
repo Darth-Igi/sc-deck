@@ -10,6 +10,9 @@ import { resolveTheme } from "./resolve";
 // styled() components (({ theme }) => theme.ship) both reach it.
 export function buildMuiTheme(ship) {
   const c = ship.colors;
+  const f = ship.font;
+  // optional font slots only emit CSS when set (default look unchanged)
+  const spacing = f.letterSpacing ? { letterSpacing: f.letterSpacing } : {};
   return createTheme({
     palette: {
       mode: "dark",
@@ -24,7 +27,9 @@ export function buildMuiTheme(ship) {
       borderRadius: ship.radius,
     },
     typography: {
-      fontFamily: ship.font.family,
+      fontFamily: f.family,
+      body1: spacing,
+      body2: spacing,
       button: {
         textTransform: "uppercase",
         fontWeight: 600,
@@ -34,7 +39,14 @@ export function buildMuiTheme(ship) {
     components: {
       MuiCssBaseline: {
         styleOverrides: {
-          body: { fontStyle: ship.font.style, fontStretch: ship.font.stretch },
+          ...(f.scale !== 1 ? { html: { fontSize: `${f.scale * 100}%` } } : {}),
+          body: {
+            fontStyle: f.style,
+            fontStretch: f.stretch,
+            ...spacing,
+            ...(f.synthesis ? { fontSynthesis: f.synthesis } : {}),
+            ...(f.textShadow ? { textShadow: f.textShadow } : {}),
+          },
         },
       },
     },

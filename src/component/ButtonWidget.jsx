@@ -36,7 +36,7 @@ export default function ButtonWidget({ widget }) {
         color: pressed ? c(b.pressedText) : c(b.text),
         fontSize: "0.85rem",
         fontWeight: 700,
-        letterSpacing: "0.12em",
+        letterSpacing: b.letterSpacing,
         textTransform: "uppercase",
         userSelect: "none",
         cursor: "pointer",

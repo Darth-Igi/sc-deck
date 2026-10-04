@@ -73,13 +73,13 @@ const LITERAL = /^(#|rgb|hsl|transparent$|white$|black$|currentColor$|inherit$)/
 const COLOR_SLOTS = {
   panel: ["border", "background", "titleColor", "titleBackground", "divider"],
   button: ["border", "background", "text", "accent", "pressedText"],
-  nav: ["color", "border", "titleBackground", "titleColor"],
+  nav: ["color", "border", "titleBackground", "titleColor", "counterColor"],
   toggle: ["accent", "onTrack", "offThumb", "trackBorder"],
 };
 // optional slots: null = "not used / fall back"
 const NULLABLE_SLOTS = {
   panel: ["titleMarker", "dividerCaps"],
-  nav: ["arrowFill", "titleBorder"],
+  nav: ["arrowFill", "titleBorder", "titleMarker"],
   toggle: ["onTrackBorder", "offThumbBorder"],
 };
 
@@ -111,6 +111,26 @@ test("default theme: all color slots reference known roles", () => {
 test("registered ship themes: all color slots resolve after merging", () => {
   for (const key of Object.keys(SHIP_THEMES)) {
     checkSlots(key, resolveTheme(key, SHIP_THEMES, defaultTheme));
+  }
+});
+
+test("real registry: manufacturer fallback and model overrides", () => {
+  assert.deepStrictEqual(themeChain("RSI_Apollo_Medivac", SHIP_THEMES), ["RSI"]);
+  assert.deepStrictEqual(themeChain("RSI_Aurora_Mk_II", SHIP_THEMES), ["RSI"]);
+  assert.deepStrictEqual(themeChain("RSI_Constellation_Andromeda", SHIP_THEMES), ["RSI", "RSI_Constellation"]);
+  assert.deepStrictEqual(themeChain("ORIG_M80", SHIP_THEMES), ["ORIG", "ORIG_M80"]);
+  assert.deepStrictEqual(themeChain("KRIG_L-22_Alpha_Wolf", SHIP_THEMES), ["KRIG"]);
+  // the Constellation must undo the RSI chamfer shapes
+  const conny = resolveTheme("RSI_Constellation_Andromeda", SHIP_THEMES, defaultTheme);
+  assert.strictEqual(conny.button.corner, "round");
+  assert.strictEqual(conny.nav.corner, "round");
+  assert.strictEqual(resolveTheme("RSI_Aurora_Mk_II", SHIP_THEMES, defaultTheme).button.corner, "chamfer");
+});
+
+test("font scale is a positive number in every theme", () => {
+  for (const key of [null, ...Object.keys(SHIP_THEMES)]) {
+    const s = resolveTheme(key, SHIP_THEMES, defaultTheme).font.scale;
+    assert.ok(typeof s === "number" && s > 0, `${key}: font.scale = ${s}`);
   }
 });
 

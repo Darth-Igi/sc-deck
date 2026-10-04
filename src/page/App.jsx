@@ -151,6 +151,18 @@ export default function App() {
       </Box>
 
       <StatusBar />
+
+      {art.overlay && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            background: art.overlay,
+            pointerEvents: "none",
+            zIndex: 10,
+          }}
+        />
+      )}
     </Box>
   );
 }

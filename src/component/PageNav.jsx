@@ -92,7 +92,11 @@ export default function PageNav() {
           textAlign: "center",
           border: `1px solid ${c(n.titleBorder ?? n.border)}`,
           borderRadius: `${n.radius}px`,
-          background: c(n.titleBackground),
+          background: n.titleFill
+            ? `${n.titleFill}, ${c(n.titleBackground)}`
+            : c(n.titleBackground),
+          // inset shadow instead of a border: the marker must not shift the layout
+          ...(n.titleMarker ? { boxShadow: `inset 5px 0 0 ${c(n.titleMarker)}` } : {}),
           py: 0.5,
           transition: `background ${t.transitionMs}ms ease, border-color ${t.transitionMs}ms ease`,
         }}
@@ -100,14 +104,14 @@ export default function PageNav() {
         <Typography
           sx={{
             color: c(n.titleColor),
-            letterSpacing: "0.25em",
+            letterSpacing: n.titleSpacing,
             fontSize: "1.2rem",
             fontWeight: 600,
           }}
         >
           {page.title}
         </Typography>
-        <Typography sx={{ color: hud.textDim, fontSize: "0.8rem", letterSpacing: "0.2em" }}>
+        <Typography sx={{ color: c(n.counterColor), fontSize: "0.8rem", letterSpacing: "0.2em" }}>
           {currentPageIndex + 1} / {pages.length}
         </Typography>
       </Box>

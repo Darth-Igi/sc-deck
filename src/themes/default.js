@@ -30,6 +30,11 @@ export default {
     family: '"Bahnschrift", "Segoe UI", sans-serif',
     style: "normal",          // "italic" for slanted cockpit fonts
     stretch: "normal",        // "condensed" / "semi-condensed" (Bahnschrift has a width axis)
+    // Bundled fonts (VT323, Share Tech Mono) are imported in main.jsx.
+    scale: 1,                 // scales all rem font sizes (small x-height fonts like VT323)
+    letterSpacing: null,      // body text + toggle labels; null = MUI default
+    synthesis: null,          // "none": no fake bold for single-weight fonts
+    textShadow: null,         // e.g. phosphor glow of CRT screens
   },
 
   // MUI's global corner radius (e.g. CircularProgress, dialogs)
@@ -62,6 +67,7 @@ export default {
     text: "text",
     accent: "line",           // pressed fill; per widget via config "accent"
     pressedText: "activeText",
+    letterSpacing: "0.12em",
   },
 
   nav: {
@@ -74,6 +80,10 @@ export default {
     titleBackground: "surfaceStrong",
     titleBorder: null,        // null = same as border
     titleColor: "text",
+    counterColor: "textDim",  // "1 / 3" below the title
+    titleSpacing: "0.25em",
+    titleFill: null,          // CSS background layered over titleBackground (e.g. hatching)
+    titleMarker: null,        // color: bar at the left edge of the title
   },
 
   toggle: {
@@ -92,10 +102,12 @@ export default {
   },
 
   // Decorative extras: CSS background layered over the deck background
-  // (pattern/gradient/url(...)) and an optional logo watermark (imported
-  // asset URL, e.g. `import logo from "./assets/rsi.svg"`).
+  // (pattern/gradient/url(...)), an overlay drawn ABOVE everything (e.g.
+  // CRT scanlines; never catches pointer events) and an optional logo
+  // watermark (imported asset URL, e.g. `import logo from "./assets/rsi.svg"`).
   art: {
     background: null,
+    overlay: null,
     logo: null,
     logoOpacity: 0.12,
   },
