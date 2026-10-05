@@ -1,5 +1,7 @@
 // Mini test suite without a framework: node test/themes.test.mjs
 import assert from "assert";
+import { readFileSync } from "fs";
+import { createRequire } from "module";
 import { mergeTheme, themeChain, resolveTheme, themeColor } from "../src/themes/resolve.js";
 import defaultTheme from "../src/themes/default.js";
 import { SHIP_THEMES } from "../src/themes/registry.js";
@@ -125,6 +127,33 @@ test("real registry: manufacturer fallback and model overrides", () => {
   assert.strictEqual(conny.button.corner, "round");
   assert.strictEqual(conny.nav.corner, "round");
   assert.strictEqual(resolveTheme("RSI_Aurora_Mk_II", SHIP_THEMES, defaultTheme).button.corner, "chamfer");
+});
+
+test("real session 2026-09-28: every boarded ship lands in its theme", () => {
+  // End to end: real Game.log lines -> parser -> vehicleClass -> theme chain.
+  // Breaks loudly if a patch renames the channel display names.
+  const { createGameLogParser } = createRequire(import.meta.url)("../gamelog.js");
+  const fixture = new URL("./fixtures/session-2026-09-28.log", import.meta.url);
+  const chains = {};
+  const parser = createGameLogParser({
+    onEvent: (e) => {
+      if (e.type === "vehicle-changed") chains[e.vehicleClass] = themeChain(e.vehicleClass, SHIP_THEMES);
+    },
+  });
+  readFileSync(fixture, "utf-8").split(/\r?\n/).forEach((l) => parser.feedLine(l));
+  assert.deepStrictEqual(chains, {
+    ORIG_M80: ["ORIG", "ORIG_M80"],
+    ORIG_400i: ["ORIG"],
+    ANVL_F7A_Hornet_Mk_II: ["ANVL"],
+    AEGS_Gladius: ["AEGS"],
+    AEGS_Sabre: ["AEGS"],
+    CRUS_A1_Spirit: ["CRUS"],
+    DRAK_Corsair: ["DRAK"],
+    "KRIG_L-21_Wolf": ["KRIG"],
+    "KRIG_L-22_Alpha_Wolf": ["KRIG"],
+    RSI_Aurora_Mk_II: ["RSI"],
+    RSI_Constellation_Andromeda: ["RSI", "RSI_Constellation"],
+  });
 });
 
 test("font scale is a positive number in every theme", () => {

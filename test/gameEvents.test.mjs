@@ -1,6 +1,14 @@
 // Mini test suite without a framework: node test/gameEvents.test.mjs
 import assert from "assert";
-import { applyGameEvent, initialToggleStates, describeGameEvent } from "../src/gameEvents.js";
+import {
+  applyGameEvent,
+  initialToggleStates,
+  describeGameEvent,
+  isAlreadyApplied,
+  cursorAfter,
+  snapshotOf,
+  restoreSnapshot,
+} from "../src/gameEvents.js";
 
 let passed = 0;
 function test(name, fn) {
@@ -154,6 +162,93 @@ test("describeGameEvent produces status bar messages", () => {
   assert.strictEqual(describeGameEvent({ type: "vehicle-left" }), "LEFT SHIP");
   assert.strictEqual(describeGameEvent({ type: "vehicle-destroyed", isCurrent: false }), null);
   assert.ok(describeGameEvent({ type: "player-killed" }));
+});
+
+// ---- Log position + persistence ----
+const S = "2026-09-28T18:29:21.844Z";
+const ev = (line, session = S) => ({ type: "vehicle-left", vehicleId: "x", session, line });
+
+test("isAlreadyApplied: same session up to the cursor is skipped, everything else applies", () => {
+  const cursor = { session: S, line: 10 };
+  assert.strictEqual(isAlreadyApplied(cursor, ev(9)), true);
+  assert.strictEqual(isAlreadyApplied(cursor, ev(10)), true);
+  assert.strictEqual(isAlreadyApplied(cursor, ev(11)), false);
+  assert.strictEqual(isAlreadyApplied(cursor, ev(3, "other session")), false);
+  assert.strictEqual(isAlreadyApplied(null, ev(3)), false);
+  // session-reset after truncation has no session -> always applies
+  assert.strictEqual(isAlreadyApplied(cursor, { type: "session-reset", session: null, line: 0 }), false);
+});
+
+test("cursorAfter: position of the event, null after a truncation reset", () => {
+  assert.deepStrictEqual(cursorAfter(ev(7)), { session: S, line: 7 });
+  assert.strictEqual(cursorAfter({ type: "session-reset", session: null, line: 0 }), null);
+});
+
+const live = () => ({
+  gamelogCursor: { session: S, line: 42 },
+  currentVehicleId: "ORIG_M80:P",
+  currentVehicleClass: "ORIG_M80",
+  currentVehicleName: "Origin M80",
+  toggleStates: { lights: true, wpn: false },
+  vehicleMemory: { "AEGS_Sabre:P": { lights: true, wpn: true } },
+  pages, // not part of the snapshot
+});
+
+test("snapshot round trip within the same session restores ship, toggles and memory", () => {
+  const snap = JSON.parse(JSON.stringify(snapshotOf(live())));
+  assert.strictEqual(snap.pages, undefined);
+  assert.deepStrictEqual(restoreSnapshot(snap, ev(1), pages), {
+    gamelogCursor: { session: S, line: 42 },
+    currentVehicleId: "ORIG_M80:P",
+    currentVehicleClass: "ORIG_M80",
+    currentVehicleName: "Origin M80",
+    toggleStates: { lights: true, wpn: false },
+    vehicleMemory: { "AEGS_Sabre:P": { lights: true, wpn: true } },
+  });
+});
+
+test("snapshot of another game session is not restored", () => {
+  const snap = snapshotOf(live());
+  assert.strictEqual(restoreSnapshot(snap, ev(1, "2026-09-29T09:00:00.000Z"), pages), null);
+  assert.strictEqual(restoreSnapshot(snap, { type: "session-reset", session: null, line: 0 }, pages), null);
+});
+
+test("restore: toggles follow the current config, garbage is dropped", () => {
+  const snap = snapshotOf(live());
+  snap.toggleStates = { lights: true, removedWidget: true, wpn: "yes" };
+  snap.vehicleMemory = { "A:P": { lights: false, junk: 3 }, "B:P": "nope" };
+  const up = restoreSnapshot(snap, ev(1), pages);
+  // wpn: invalid value -> initial (true); removed widget dropped
+  assert.deepStrictEqual(up.toggleStates, { lights: true, wpn: true });
+  assert.deepStrictEqual(up.vehicleMemory, { "A:P": { lights: false }, "B:P": {} });
+});
+
+test("restore rejects unknown versions and broken files", () => {
+  assert.strictEqual(restoreSnapshot(null, ev(1), pages), null);
+  assert.strictEqual(restoreSnapshot({ ...snapshotOf(live()), version: 99 }, ev(1), pages), null);
+  assert.strictEqual(restoreSnapshot({ ...snapshotOf(live()), cursor: null }, ev(1), pages), null);
+  assert.strictEqual(
+    restoreSnapshot({ ...snapshotOf(live()), cursor: { session: S, line: "x" } }, ev(1), pages),
+    null
+  );
+});
+
+test("restored state + replayed log: only events after the cursor change anything", () => {
+  // Saved while in the M80 with lights ON (line 42). The app restarts; the
+  // replay starts with the first boarding of the M80 (fresh, line 5) - that
+  // must not wipe the state - and continues past the cursor.
+  let state = restoreSnapshot(snapshotOf(live()), ev(1), pages);
+  const replay = [
+    { type: "vehicle-changed", vehicleId: "ORIG_M80:P", vehicleClass: "ORIG_M80", fresh: true, session: S, line: 5 },
+    { type: "vehicle-left", vehicleId: "ORIG_M80:P", session: S, line: 50 },
+  ];
+  for (const e of replay) {
+    if (isAlreadyApplied(state.gamelogCursor, e)) continue;
+    state = { ...state, ...applyGameEvent(state, e, pages), gamelogCursor: cursorAfter(e) };
+  }
+  assert.deepStrictEqual(state.vehicleMemory["ORIG_M80:P"], { lights: true, wpn: false });
+  assert.strictEqual(state.currentVehicleId, null);
+  assert.deepStrictEqual(state.gamelogCursor, { session: S, line: 50 });
 });
 
 console.log(`\n${passed} tests passed`);

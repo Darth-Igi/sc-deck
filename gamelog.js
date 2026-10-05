@@ -429,6 +429,8 @@ function createGameLogParser({ onEvent, patterns, playerName } = {}) {
 // fs.watch is unreliable on a file the game holds open and appends to, so
 // community tools poll - we do the same. Handles: file not there yet,
 // truncation (new session), partial lines at the read boundary.
+// onLine(line, lineNo): lineNo counts from 1 at offset 0 of the file (only a
+// real line number with fromStart = true; empty lines are not counted).
 function createGameLogTailer({
   filePath,
   onLine,
@@ -439,6 +441,7 @@ function createGameLogTailer({
 } = {}) {
   let pos = null; // null = not initialized yet
   let partial = "";
+  let lineNo = 0;  // 1-based number of the last delivered line since offset 0
   let timer = null;
   let stopped = false;
   let lastStatus = null;
@@ -475,6 +478,7 @@ function createGameLogTailer({
       status("missing");
       pos = null;
       partial = "";
+      lineNo = 0;
       schedule();
       return;
     }
@@ -487,6 +491,7 @@ function createGameLogTailer({
       // File shrank -> game restarted and recreated the log.
       pos = 0;
       partial = "";
+      lineNo = 0;
       if (onTruncate) onTruncate();
     }
 
@@ -498,7 +503,7 @@ function createGameLogTailer({
         const lines = partial.split(/\r?\n/);
         partial = lines.pop(); // last element may be an incomplete line
         for (const line of lines) {
-          if (line) onLine(line);
+          if (line) onLine(line, ++lineNo);
         }
       }
     }
@@ -519,6 +524,58 @@ function createGameLogTailer({
   };
 }
 
+// ---- Session identity + log position for every event ----
+// A Game.log belongs to exactly one game session; its first line carries the
+// start timestamp ("<2026-09-28T18:29:21.844Z> BackupNameAttachment=...").
+// That timestamp identifies the session, the line number is the position.
+function sessionIdOf(firstLine) {
+  const m = /^<([^>]+)>/.exec(firstLine);
+  return m ? m[1] : firstLine.slice(0, 200);
+}
+
+/**
+ * Parser + position tagging between tailer and renderer. Every event gets
+ * { session, line } so the renderer can tell events it already applied
+ * (replay after a watcher restart or app restart) from new ones - see
+ * isAlreadyApplied() in src/gameEvents.js. The parser emits at most one
+ * event per line, so (session, line) is a unique position.
+ *
+ * feedLine(text, lineNo) - from the tailer (lineNo 1 = first line of the file)
+ * truncate()             - log truncated (game restart): session-reset,
+ *                          tagged { session: null, line: 0 }
+ */
+function createGameLogPipeline({ onEvent, patterns, playerName } = {}) {
+  const emit = typeof onEvent === "function" ? onEvent : () => {};
+  let session = null;
+  let line = 0;
+  const parser = createGameLogParser({
+    patterns,
+    playerName,
+    onEvent: (event) => emit({ ...event, session, line }),
+  });
+
+  function feedLine(text, lineNo) {
+    line = lineNo;
+    if (lineNo === 1) {
+      const id = sessionIdOf(text);
+      // The file was replaced without us seeing it shrink (it was briefly
+      // missing): a different first line means a new game session.
+      const replaced = session !== null && id !== session;
+      session = id;
+      if (replaced) parser.resetSession();
+    }
+    parser.feedLine(text);
+  }
+
+  function truncate() {
+    session = null;
+    line = 0;
+    parser.resetSession();
+  }
+
+  return { feedLine, truncate, getState: parser.getState };
+}
+
 // Default install path; overridable via config.gamelog.path.
 const DEFAULT_LOG_PATH = path.join(
   "C:",
@@ -532,6 +589,8 @@ const DEFAULT_LOG_PATH = path.join(
 module.exports = {
   createGameLogParser,
   createGameLogTailer,
+  createGameLogPipeline,
+  sessionIdOf,
   compilePatterns,
   vehicleClassOf,
   parseShipChannel,

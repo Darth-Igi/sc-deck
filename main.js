@@ -9,7 +9,7 @@ const path = require("path");
 const fs = require("fs");
 const { validateConfig } = require("./configValidation");
 const {
-  createGameLogParser,
+  createGameLogPipeline,
   createGameLogTailer,
   DEFAULT_LOG_PATH,
 } = require("./gamelog");
@@ -221,7 +221,9 @@ function restartGameLog() {
   if (!gamelog || !gamelog.enabled) return;
 
   const logPath = gamelog.path || DEFAULT_LOG_PATH;
-  const parser = createGameLogParser({
+  // Events carry { session, line }: the renderer skips what it already
+  // applied, so this replay is harmless for a live UI too (config reload).
+  const pipeline = createGameLogPipeline({
     patterns: gamelog.patterns,
     playerName: gamelog.playerName,
     onEvent: (event) => {
@@ -233,8 +235,8 @@ function restartGameLog() {
   gamelogTailer = createGameLogTailer({
     filePath: logPath,
     pollMs: gamelog.pollMs || 750,
-    onLine: (line) => parser.feedLine(line),
-    onTruncate: () => parser.resetSession(),
+    onLine: (line, lineNo) => pipeline.feedLine(line, lineNo),
+    onTruncate: () => pipeline.truncate(),
     onStatus: (state) => sendGameEvent({ type: "gamelog-status", state, path: logPath }),
   });
 }
@@ -248,6 +250,46 @@ app.on("will-quit", () => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// ---- Persisted deck state (per-ship toggle memory) ----
+// The renderer owns the state and its validation (src/gameEvents.js); the
+// main process only stores the snapshot as JSON in userData - dev and
+// packaged builds alike. The snapshot is bound to a Game.log session, so a
+// stale file is simply ignored by the renderer.
+const DECK_STATE_MAX_BYTES = 1024 * 1024;
+
+function deckStatePath() {
+  return path.join(app.getPath("userData"), "deck-state.json");
+}
+
+ipcMain.handle("get-deck-state", () => {
+  try {
+    return JSON.parse(fs.readFileSync(deckStatePath(), "utf-8"));
+  } catch {
+    return null; // missing or corrupt -> start without memory
+  }
+});
+
+ipcMain.handle("save-deck-state", (_event, snapshot) => {
+  if (!snapshot || typeof snapshot !== "object" || Array.isArray(snapshot)) {
+    return { ok: false, error: "Invalid snapshot" };
+  }
+  const json = JSON.stringify(snapshot);
+  if (json.length > DECK_STATE_MAX_BYTES) {
+    return { ok: false, error: "Snapshot too large" };
+  }
+  try {
+    // write + rename: a crash mid-write must not leave a truncated file
+    const file = deckStatePath();
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(`${file}.tmp`, json);
+    fs.renameSync(`${file}.tmp`, file);
+    return { ok: true };
+  } catch (err) {
+    console.error("Failed to save deck state:", err);
+    return { ok: false, error: String(err) };
+  }
 });
 
 // ---- IPC ----

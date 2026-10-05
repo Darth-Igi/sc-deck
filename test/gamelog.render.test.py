@@ -157,6 +157,85 @@ with sync_playwright() as p:
 
     assert not errors, f"JS errors: {errors}"
     print("✓ game events: reset, per-ship restore, destruction, leave/re-board, fresh, status bar, ship themes")
+
+    # ---- Persistence: snapshot restore after an app restart ----
+    # The mock replays the log the moment the renderer subscribes, while
+    # getDeckState is still pending -> events must be queued, the snapshot
+    # applied first, and replayed events up to its cursor skipped.
+    S = "2026-09-28T18:29:21.844Z"
+    snapshot = {
+        "version": 1,
+        "cursor": {"session": S, "line": 42},
+        "currentVehicleId": "ORIG_M80:P",
+        "currentVehicleClass": "ORIG_M80",
+        "currentVehicleName": "Origin M80",
+        "toggleStates": {"ovrclk": True},
+        "vehicleMemory": {"AEGS_Sabre:P": {"ovrclk": True}},
+    }
+    m80 = "{type:'vehicle-changed', vehicleId:'ORIG_M80:P', vehicleClass:'ORIG_M80', shipName:'Origin M80', fresh:%s, session:'%s', line:%d}"
+
+    def restart_app(session_of_log):
+        page = b.new_page(viewport={"width": 2560, "height": 720})
+        page.add_init_script(f"""
+          window.__gameListeners = [];
+          window.__saved = [];
+          window.scDeck = {{
+            getConfig: async () => ({{ ok: true, path: "/mock", config: {json.dumps(config)}, warnings: [] }}),
+            sendHotkey: async (k) => ({{ ok: true }}),
+            quitApp: async () => {{}},
+            onConfigChanged: (cb) => () => {{}},
+            getDeckState: () => new Promise(r => setTimeout(() => r({json.dumps(snapshot)}), 300)),
+            saveDeckState: async (s) => {{ window.__saved.push(s); return {{ ok: true }}; }},
+            onGameEvent: (cb) => {{
+              window.__gameListeners.push(cb);
+              [{(m80 % ("true", session_of_log, 5))}].forEach(cb);
+              return () => {{}};
+            }}
+          }};
+          window.__fire = (e) => window.__gameListeners.forEach(cb => cb(e));
+        """)
+        page.on("pageerror", lambda e: errors.append(str(e)))
+        page.goto("http://127.0.0.1:8126/")
+        page.wait_for_timeout(1200)
+        return page
+
+    pg2 = restart_app(S)
+    on2 = lambda: pg2.locator('label:has-text("OVRCLK") input[type=checkbox]').is_checked()
+    assert on2(), "snapshot toggles restored; replayed fresh boarding (before cursor) skipped"
+    assert pg2.evaluate("getComputedStyle(document.body).backgroundColor") != "rgb(6, 9, 15)", \
+        "restored ship must select its theme"
+
+    # new events after the cursor apply normally: leave -> initial, re-board -> restore
+    pg2.evaluate(f"window.__fire({{type:'vehicle-left', vehicleId:'ORIG_M80:P', session:'{S}', line:50}})")
+    pg2.wait_for_timeout(200)
+    assert not on2(), "leaving after the cursor falls back to initial"
+    pg2.evaluate(f"window.__fire({m80 % ('false', S, 51)})")
+    pg2.wait_for_timeout(200)
+    assert on2(), "re-boarding restores the remembered M80 state"
+
+    # a second replay (watcher restart on config reload) changes nothing
+    pg2.evaluate(f"window.__fire({m80 % ('true', S, 5)})")
+    pg2.evaluate(f"window.__fire({{type:'vehicle-left', vehicleId:'ORIG_M80:P', session:'{S}', line:50}})")
+    pg2.wait_for_timeout(200)
+    assert on2(), "replayed events of the same session must be skipped"
+
+    # debounced save carries the new cursor and the remembered memory
+    pg2.wait_for_timeout(600)
+    saved = pg2.evaluate("window.__saved[window.__saved.length - 1]")
+    assert saved["cursor"] == {"session": S, "line": 51}, saved["cursor"]
+    assert saved["currentVehicleId"] == "ORIG_M80:P"
+    assert saved["toggleStates"]["ovrclk"] is True
+    assert saved["vehicleMemory"]["AEGS_Sabre:P"] == {"ovrclk": True}
+    pg2.close()
+
+    # Snapshot of an older game session (game restarted meanwhile): ignored
+    pg3 = restart_app("2026-09-29T09:00:00.000Z")
+    assert not pg3.locator('label:has-text("OVRCLK") input[type=checkbox]').is_checked(), \
+        "a snapshot from another session must not be restored"
+    pg3.close()
+
+    assert not errors, f"JS errors: {errors}"
+    print("✓ persistence: queued replay, snapshot restore, cursor skip, debounced save, stale session")
     b.close()
 srv.shutdown()
 print("GAMELOG RENDER TEST OK")

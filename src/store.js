@@ -1,9 +1,15 @@
 import { create } from "zustand";
 import {
   applyGameEvent,
+  cursorAfter,
   describeGameEvent,
   initialToggleStates,
+  isAlreadyApplied,
+  restoreSnapshot,
+  snapshotOf,
 } from "./gameEvents";
+
+let initStarted = false;
 
 export const useDeckStore = create((set, get) => ({
   // ---- Configuration (from config.json via the main process) ----
@@ -28,6 +34,15 @@ export const useDeckStore = create((set, get) => ({
   vehicleMemory: {},         // { [vehicleId]: toggleStates } per-ship memory
   gameStatus: null,          // { message, time } last game event, status bar
   gamelogState: null,        // "watching" | "missing" - tailer status
+  gamelogCursor: null,       // { session, line } of the last applied event
+
+  // Startup: game events are queued until config AND the persisted
+  // snapshot are loaded (the replay starts right after page load and would
+  // otherwise race both). The snapshot waits for the first event, which
+  // tells whether it belongs to the current Game.log session.
+  ready: false,
+  eventQueue: [],
+  pendingSnapshot: null,
 
   // Dev-only theme preview (StatusBar picker, `npm run dev`): a vehicle
   // class that overrides the detected ship for theming only.
@@ -43,18 +58,53 @@ export const useDeckStore = create((set, get) => ({
       set({ gamelogState: event.state });
       return;
     }
+    if (!get().ready) {
+      set((state) => ({ eventQueue: [...state.eventQueue, event] }));
+      return;
+    }
+
+    const snapshot = get().pendingSnapshot;
+    if (snapshot) {
+      // First event after startup: restore if same session, else drop it
+      const restored = restoreSnapshot(snapshot, event, get().pages);
+      set({ pendingSnapshot: null, ...(restored || {}) });
+    }
+    if (isAlreadyApplied(get().gamelogCursor, event)) return;
+
     const { toggleStates, currentVehicleId, vehicleMemory, pages } = get();
     const update = applyGameEvent(
       { toggleStates, currentVehicleId, vehicleMemory },
       event,
       pages
     );
-    if (!update) return;
+    const gamelogCursor = cursorAfter(event);
+    if (!update) {
+      set({ gamelogCursor });
+      return;
+    }
+    update.gamelogCursor = gamelogCursor;
     const message = describeGameEvent(event);
     if (message) {
       update.gameStatus = { message, time: new Date().toLocaleTimeString() };
     }
     set(update);
+  },
+
+  // App start: config first (initial toggle values), then the persisted
+  // snapshot, then the queued game events.
+  init: async () => {
+    if (initStarted) return; // StrictMode runs mount effects twice in dev
+    initStarted = true;
+    await get().loadConfig();
+    let snapshot = null;
+    try {
+      if (window.scDeck.getDeckState) snapshot = await window.scDeck.getDeckState();
+    } catch (err) {
+      console.error("Failed to load deck state:", err);
+    }
+    const queued = get().eventQueue;
+    set({ ready: true, eventQueue: [], pendingSnapshot: snapshot || null });
+    for (const event of queued) get().handleGameEvent(event);
   },
 
   loadConfig: async () => {
@@ -124,7 +174,10 @@ export const useDeckStore = create((set, get) => ({
 
   goToPage: (index) => set({ currentPageIndex: index }),
 
-  quit: () => window.scDeck.quitApp(),
+  quit: () => {
+    flushDeckState(); // IPC is ordered: saved before the quit is handled
+    window.scDeck.quitApp();
+  },
 
   // ---- Shared trigger logic: send keys + pressed/error feedback ----
   _sendKeys: async (widget) => {
@@ -211,3 +264,31 @@ export const useDeckStore = create((set, get) => ({
       };
     }),
 }));
+
+// ---- Persistence: save the snapshot (debounced) whenever it changes ----
+// Only with a cursor: without a Game.log session there is nothing a later
+// start could validate the snapshot against (gamelog disabled, or right
+// after a game restart until the first line of the new log).
+const SAVE_DEBOUNCE_MS = 400;
+let saveTimer = null;
+
+function flushDeckState() {
+  clearTimeout(saveTimer);
+  saveTimer = null;
+  const state = useDeckStore.getState();
+  if (!state.gamelogCursor || !window.scDeck.saveDeckState) return;
+  window.scDeck.saveDeckState(snapshotOf(state)).catch((err) =>
+    console.error("Failed to save deck state:", err)
+  );
+}
+
+useDeckStore.subscribe((state, prev) => {
+  const changed =
+    state.gamelogCursor !== prev.gamelogCursor ||
+    state.toggleStates !== prev.toggleStates ||
+    state.vehicleMemory !== prev.vehicleMemory ||
+    state.currentVehicleId !== prev.currentVehicleId;
+  if (!changed || !state.ready || !state.gamelogCursor) return;
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(flushDeckState, SAVE_DEBOUNCE_MS);
+});

@@ -66,6 +66,12 @@ UI reloads immediately, keeping the current page and all toggle states. If
 the file is broken, the error screen appears; it disappears again
 automatically once you fix and save.
 
+**Remembered ship states**: with Game.log tracking enabled, the toggle
+states per ship are saved to `%APPDATA%/sc-deck/deck-state.json` (dev and
+packaged alike) and restored after an app restart - as long as the game
+session is the same. After a game restart the file is ignored (every ship is
+stowed then anyway). Deleting it is harmless.
+
 Note: if an earlier version already created a copy under
 `%APPDATA%\Roaming\sc-deck\config.json`, you can delete it - it is no
 longer used in development mode.

@@ -4,6 +4,9 @@ contextBridge.exposeInMainWorld("scDeck", {
   getConfig: () => ipcRenderer.invoke("get-config"),
   sendHotkey: (keys) => ipcRenderer.invoke("send-hotkey", keys),
   quitApp: () => ipcRenderer.invoke("quit-app"),
+  // Per-ship toggle memory survives app restarts (userData/deck-state.json)
+  getDeckState: () => ipcRenderer.invoke("get-deck-state"),
+  saveDeckState: (snapshot) => ipcRenderer.invoke("save-deck-state", snapshot),
   // Config hot reload: main process notifies when config.json has changed
   onConfigChanged: (callback) => {
     const listener = () => callback();

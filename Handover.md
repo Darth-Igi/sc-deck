@@ -1,8 +1,10 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.11 (Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger,
-Origin 400i/M80, RSI Aurora/Constellation; davor v2.10: Schiffserkennung über den Schiffs-Chatkanal + Ship-Themes:
-eigenes Styling pro Schiffsmodell mit Hersteller-Fallback). Dieses Dokument
+Stand: v2.12 (Per-Schiff-Toggle-Zustände überleben einen App-Neustart;
+Klassennamen aller Theme-Hersteller mit echter Game.log belegt; davor v2.11:
+Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger, Origin 400i/M80, RSI
+Aurora/Constellation; v2.10: Schiffserkennung über den Schiffs-Chatkanal +
+Ship-Themes mit Hersteller-Fallback). Dieses Dokument
 fasst zusammen, was gebaut wurde und warum, damit eine andere KI/Person ohne
 Chatverlauf weiterarbeiten kann.
 
@@ -46,6 +48,7 @@ Default-Look.
 sc-deck/
 ├── main.js                Electron Main-Prozess (siehe Abschnitt 4)
 ├── preload.js             contextBridge: getConfig, sendHotkey, quitApp,
+│                          getDeckState, saveDeckState (v2.12),
 │                          onConfigChanged, onGameEvent
 ├── scancodeSender.js      NEU v2.8: Scancode-Tabelle (Set 1) + SendInput
 │                          via koffi; pure Teile (Mapping, Event-Sequenz)
@@ -53,11 +56,14 @@ sc-deck/
 ├── configValidation.js    Reines Node-Modul, prüft config.json inkl.
 │                          gamelog-Abschnitt; Key-Namen werden gegen die
 │                          Scancode-Tabelle validiert (injiziert)
-├── gamelog.js             Game.log-Parser + Polling-Tailer
-│                          (Electron-frei, unit-testbar; siehe Abschnitt 6)
+├── gamelog.js             Game.log-Parser + Polling-Tailer + Pipeline
+│                          (Session/Zeile je Event, v2.12; Electron-frei,
+│                          unit-testbar; siehe Abschnitt 6)
 ├── config.json            Nutzer-Config (gamelog enabled, echte Binds,
 │                          u. a. RightShift/RightControl/RightAlt-Combos)
 ├── vite.config.js
+├── electron-builder.yml   Packaging (NSIS-Installer + portable .exe)
+├── scripts/build.mjs      npm run dist*: Tests, Vite-Build, electron-builder
 ├── design-examples/       Referenz-Screenshots der Schiffs-MFDs pro Theme
 │                          (Namensschema <Klasse>_NN.jpg, vom Nutzer)
 ├── src/
@@ -65,9 +71,12 @@ sc-deck/
 │   ├── store.js           Zustand-Store: pages, currentPageIndex,
 │   │                      toggleStates, currentVehicleId/-Class/-Name,
 │   │                      vehicleMemory, gameStatus, gamelogState,
-│   │                      themePreview (Dev), handleGameEvent,
-│   │                      triggerButton/-Toggle, resetToggles, correctToggle
-│   ├── gameEvents.js      pure Logik Event → Toggle-Update
+│   │                      gamelogCursor + init/Event-Queue/Snapshot-
+│   │                      Speichern (v2.12), themePreview (Dev),
+│   │                      handleGameEvent, triggerButton/-Toggle,
+│   │                      resetToggles, correctToggle
+│   ├── gameEvents.js      pure Logik Event → Toggle-Update, Cursor,
+│   │                      Snapshot (snapshotOf/restoreSnapshot)
 │   ├── useLongPress.js    useLongPress (Guard für Quit/Reset) +
 │   │                      useTapOrHold (für Toggles)
 │   ├── themes/            NEU v2.10: Ship-Themes (Abschnitt 7)
@@ -93,19 +102,26 @@ sc-deck/
 │                          manuelle Korrekturen + Dev-Theme-Wähler
 └── test/
     ├── configValidation.test.js  16 Unit-Tests (inkl. gamelog, accent)
-    ├── gamelog.test.js           30 Unit-Tests: Parser (Kanal-Pfad mit
-    │                             echten Log-Zeilen, Session-Replay,
-    │                             Legacy-Zonenpfad) + Tailer
-    ├── gameEvents.test.mjs       14 Unit-Tests: Reset-/Restore-/Leave-Logik
-    ├── themes.test.mjs           NEU v2.10: 9 Unit-Tests (Präfix-Kette,
-    │                             Merge, Farbrollen, Slot-Tippfehler-Check)
+    ├── gamelog.test.js           36 Unit-Tests: Parser (Kanal-Pfad mit
+    │                             echten Log-Zeilen, Session-Replays,
+    │                             Legacy-Zonenpfad), Pipeline, Tailer
+    ├── gameEvents.test.mjs       21 Unit-Tests: Reset-/Restore-/Leave-Logik,
+    │                             Cursor, Snapshot
+    ├── themes.test.mjs           12 Unit-Tests (Präfix-Kette, Merge,
+    │                             Farbrollen, Slot-Tippfehler-Check, echte
+    │                             Session → Theme-Kette)
+    ├── fixtures/
+    │   └── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
+    │                             echten Session (Handle → TestPilot), alle
+    │                             Theme-Hersteller
     ├── scancode.test.js          9 Unit-Tests (Mapping, Flags,
     │                             Sequenz, Namensstabilität, Struct-Layout)
     ├── render.test.py            Playwright headless: Rendering, Toggle
     │                             (Tap + Long-Press-Korrektur), Nav,
     │                             Reset, Quit, Error-Screen
     ├── hotreload.test.py         Playwright: Hot-Reload behält Seite/Toggle
-    ├── gamelog.render.test.py    Game-Events + Theme-Wechsel in der UI
+    ├── gamelog.render.test.py    Game-Events + Theme-Wechsel in der UI,
+    │                             Persistenz (Queue, Restore, Cursor, Save)
     └── screenshots.py            NEU v2.10: Helfer (nicht in test:ui),
                                   PNGs aller Seiten, optional je Schiff
 ```
@@ -153,9 +169,15 @@ sc-deck/
   geprüft – plattformunabhängig, Config-Editieren auf einer Dev-Maschine
   validiert identisch zum Zielsystem.
 - **Game.log-Watcher-Lifecycle**: Start bei **jedem** `did-finish-load`
-  (auch Reload), Events als `game-event` per IPC an den Renderer,
+  (auch Reload) und bei jedem Config-Hot-Reload – jedes Mal **Replay ab
+  Zeile 1**; der Renderer überspringt bereits Verarbeitetes per Cursor
+  (Abschnitt 6a). Events als `game-event` per IPC an den Renderer,
   Konsolen-Log `[gamelog] …` fürs Debugging von Pattern-Drift. Stop in
   `will-quit`.
+- **Deck-State** (v2.12): `get-deck-state` / `save-deck-state` lesen bzw.
+  schreiben `userData/deck-state.json` (Dev und gepackt; write + rename,
+  max. 1 MB, nur Objekte). Main speichert nur – Validierung und
+  Session-Prüfung macht der Renderer (`restoreSnapshot`).
 - **Monitor-Hotplug**: `display-added`/`display-removed` → Fenster zieht
   auf den Xeneon Edge (2560×720, sonst Fallback Sekundärmonitor).
 - **Sicherheit**: `sandbox: true` (betrifft nur den Renderer – der
@@ -264,6 +286,15 @@ Schiff). Neue Signale (Ansatz übernommen von
 | Eigener Tod | Reset (Memory bleibt) |
 | Spielneustart (Log truncated) | Reset + gesamtes Memory + Instanzwissen geleert |
 
+**Praxisbeleg (Session 2026-09-28, seit v2.12 Test-Fixture):** M80 (2×, zweiter
+Einstieg korrekt `fresh: false`), 400i, F7A Hornet Mk II, Gladius, Sabre, A1
+Spirit, Corsair, L-21 Wolf, L-22 Alpha Wolf, Aurora Mk II, Constellation
+Andromeda – alle Klassennamen, Instanz-IDs (stimmen mit ClearDriver überein)
+und Theme-Ketten korrekt; jeder Ausstieg hatte seine „left“-Zeile. Fremde
+`STOWING ON UNREGISTER`-Zeilen (andere IDs) verwerfen die eigene Ausparkung
+korrekt nicht. Nicht im Log belegt: Tod, Zerstörung, Spielneustart,
+Wiedereinstieg nach erneutem Ausparken.
+
 **Bekannte Lücken:** "Im Schiff sitzen bleiben und ausschalten" ist weiterhin
 nicht erkennbar (dafür die manuellen Korrekturen, Abschnitt 8). Wer Schiff X
 ausparkt, aber zuerst in ein **anderes, schon draußen stehendes eigenes**
@@ -284,6 +315,10 @@ Schiff Y einsteigt, bekommt Y einmal fälschlich als `fresh` zurückgesetzt
     Behandelt: Datei fehlt (wartet, Status "missing"), Partial-Lines,
     CRLF, **Truncation = Spielneustart** → `onTruncate`. Beim App-Start
     wird das bestehende Log von Anfang an **replayt**.
+  - `createGameLogPipeline` (v2.12): Parser + Positions-Tagging, jedes
+    Event bekommt `{ session, line }` (siehe 6a). Der Tailer liefert dazu
+    `onLine(line, lineNo)`, Zählung ab Offset 0, Reset bei Truncation/
+    fehlender Datei.
 - **`src/gameEvents.js`** (Renderer-Seite, pure): `applyGameEvent`
   entscheidet Reset/Restore; `vehicleMemory` = `{ schiffsSchlüssel:
   toggleStates }`. Restore merged über `initialToggleStates`. Setzt
@@ -292,6 +327,46 @@ Schiff Y einsteigt, bekommt Y einmal fälschlich als `fresh` zurückgesetzt
   (`DEFAULT_PATTERNS` in `gamelog.js`) und einzeln per
   `config.gamelog.patterns.<n>` überschreibbar – ohne Code-Änderung,
   greift per Hot-Reload sofort. Validierung prüft Kompilierbarkeit.
+
+### 6a. Persistenz der Per-Schiff-Zustände (NEU v2.12)
+
+**Grundproblem:** Jeder Watcher-Start spielt die Game.log **ab Zeile 1** neu
+ab (App-Start, Fenster-Reload, Config-Hot-Reload). Mit gespeichertem
+Zustand würde z. B. der erste (`fresh`) Einstieg der Session die Memory
+wieder löschen. Das traf übrigens schon **vor** v2.12 den Hot-Reload: Config
+speichern → Replay → Toggles des aktuellen Schiffs zurück auf `initial`
+(Bug, mit dem Cursor nebenbei behoben).
+
+**Lösung: Log-Position als Cursor.**
+- Session = Zeitstempel der **ersten Log-Zeile** (`sessionIdOf`), Position =
+  Zeilennummer (der Parser erzeugt max. ein Event pro Zeile → eindeutig).
+- Der Renderer merkt sich `gamelogCursor` = Position des zuletzt
+  angewendeten Events und **überspringt** Events derselben Session mit
+  `line <= cursor.line` (`isAlreadyApplied`). Events ohne Session
+  (`session-reset` nach Truncation) gelten immer und setzen den Cursor auf null.
+- Die Pipeline erkennt zusätzlich eine **unbemerkt ersetzte** Log-Datei (Datei
+  kurz weg, neue erste Zeile) und schickt dann `session-reset`.
+
+**Snapshot** (`deck-state.json`, `snapshotOf`): `{ version: 1, cursor,
+currentVehicleId/-Class/-Name, toggleStates, vehicleMemory }` – spiegelt den
+Log **genau bis zum Cursor** wider. Gespeichert wird per Store-Subscribe
+400 ms debounced, nur wenn ein Cursor existiert (ohne aktive Game.log-
+Session gibt es nichts, wogegen ein späterer Start validieren könnte), und
+sofort beim Quit-Button (IPC ist geordnet → vor dem Beenden geschrieben).
+Ctrl+Alt+Q kann die letzten ≤ 400 ms verlieren – bewusst akzeptiert.
+
+**Start-Ablauf** (`store.init`, idempotent wegen StrictMode): Config laden →
+Snapshot holen → erst dann die bis dahin **gepufferten** Game-Events
+abarbeiten (das Replay startet direkt nach dem Seitenladen und würde sonst
+mit beidem racen). Das **erste** Event entscheidet: gleiche Session →
+Snapshot einspielen (Toggles über die aktuellen `initial`-Werte gemergt,
+Müll verworfen), danach normal mit Cursor-Skip weiter; andere Session →
+Snapshot verworfen (Spiel wurde neu gestartet, alle Schiffe sind ohnehin
+eingelagert – gleiche Semantik wie `session-reset`).
+
+Folge: Persistenz gilt **innerhalb einer Spielsession** – App-Neustart/
+-Absturz, während das Spiel läuft. Über Spielneustarts hinweg wird bewusst
+nichts übernommen. Ohne aktiviertes Game.log-Tracking wird nichts gespeichert.
 
 ### Config-Beispiel
 ```json
@@ -391,10 +466,11 @@ bekommen ein Modell-Theme obendrauf.
 | `RSI` | manufacturers/RSI.js | Apollo = Aurora Mk II → Formen in v2.11 von `RSI_Apollo` hochgezogen (Datei gelöscht, pixelgleich): achteckige Buttons, abgeschrägte Nav, Titel mit orangem Marker, eckige Toggles (weiß an, rot aus) |
 | `RSI_Constellation` | ships/RSI_Constellation.js | Andromeda: setzt RSI-Formen zurück auf rund, Lavendel-Rahmen, `notch`-Titel wie das SCREENS/CARGO-BAY-Seitenpanel, blauer Titelbalken, Toggles orange an |
 
-Klassennamen der neuen Hersteller (ANVL, AEGS, CRUS, DRAK, KRIG, ORIG)
-sind aus `MANUFACTURER_CODES` abgeleitet und **noch nicht im echten Log
-belegt** – beim ersten Einsteigen die StatusBar (`SHIP: …`) bzw. das
-`[gamelog]`-Konsolen-Log prüfen.
+Klassennamen aller Theme-Hersteller (AEGS, ANVL, CRUS, DRAK, KRIG, MISC,
+ORIG, RSI) sind seit v2.12 **im echten Log belegt** und per Fixture-Test
+gepinnt (`themes.test.mjs`: echte Session → erwartete Theme-Kette). Neue
+Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
+(`SHIP: …`) bzw. `[gamelog]`-Konsolen-Log prüfen.
 
 ### Neues Theme anlegen
 1. Datei unter `manufacturers/<CODE>.js` bzw. `ships/<Klasse>.js`, nur
@@ -439,14 +515,12 @@ belegt** – beim ersten Einsteigen die StatusBar (`SHIP: …`) bzw. das
   nachtragen (+ Test).
 - Kein Power-Dreieck/Slider-Widget (weiterhin "Could have").
 - Kein visueller Editor – Config per Hand, Hot-Reload macht das komfortabel.
-- Noch kein `electron-builder`-Setup für eine fertige `.exe`.
-- `vehicleMemory` lebt nur im RAM – App-Neustart vergisst die
-  Per-Schiff-Zustände (bewusst simpel; Persistenz über userData-JSON
-  leicht nachrüstbar). Beim Start wird die Game.log replayt, dadurch sind
-  aktuelles Schiff und Instanzwissen sofort wieder da.
+- Per-Schiff-Zustände überleben App-Neustarts nur **innerhalb derselben
+  Spielsession** (Abschnitt 6a); Ctrl+Alt+Q kann die letzten ≤ 400 ms
+  Änderungen verlieren (Quit-Button nicht).
 - Schiffserkennung hängt am **englischen** Kanal-Text und am
-  Anzeigenamen; `MANUFACTURER_CODES` ist ungeprüft für Hersteller, die
-  noch nicht im echten Log vorkamen (nur MISC/RSI belegt).
+  Anzeigenamen; `MANUFACTURER_CODES` ist für Hersteller ohne Theme
+  (ARGO, CNOU, …) noch nicht im echten Log belegt.
 - Chamfer-Formen: nur deckende Füllungen, kein Glow (siehe Abschnitt 7).
 - Hersteller-Logos (`art.logo`) vorgesehen, aber noch keine Assets
   (Nutzer liefert nach).
@@ -454,18 +528,23 @@ belegt** – beim ersten Einsteigen die StatusBar (`SHIP: …`) bzw. das
 ## 10. Testing
 
 ```bash
-npm test        # 80 Unit-Tests: Config-Validierung (16), Game.log-Parser/
-                # Tailer (30), Event→Toggle-Logik (14), Ship-Themes (11),
-                # Scancode (9). Reines Node, plattformunabhängig.
+npm test        # 94 Unit-Tests: Config-Validierung (16), Game.log-Parser/
+                # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
+                # Ship-Themes (12), Scancode (9). Reines Node,
+                # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
-                # Config-Hot-Reload, Game-Event-Pfad + Theme-Wechsel in
-                # der echten UI (braucht Python + Playwright + npm run build)
+                # Config-Hot-Reload, Game-Event-Pfad + Theme-Wechsel +
+                # Persistenz in der echten UI (braucht Python + Playwright
+                # + npm run build)
 python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.10 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.12 grün (Playwright gegen frischen Build).
+**Windows-Konsole:** Die Suiten geben `✓` aus – ohne
+`PYTHONIOENCODING=utf-8` (bzw. `chcp 65001`) bricht Python mit
+`UnicodeEncodeError` (cp1252) ab, obwohl der Test selbst grün wäre.
 Auf der Nutzer-Maschine: `python` (nicht `python3` – unter Windows ein
 Store-Alias ohne Python dahinter; `test:ui` ist entsprechend umgestellt),
 Playwright via `pip install playwright` + `python -m playwright install
@@ -491,20 +570,23 @@ Hold ist kein zweites Toggle).
    (Config enabled mit echtem Pfad + Handle). Bei Patch-Drift: echte
    Log-Zeilen mit `DEFAULT_PATTERNS` abgleichen, per Config überschreiben.
 2. ~~Long-Press-Korrektur~~ → erledigt in v2.9.
-3. Optional: `vehicleMemory` nach userData persistieren.
+3. ~~`vehicleMemory` persistieren~~ → v2.12 (`deck-state.json`, Abschnitt 6a).
+   Praxistest: im Schiff Toggles setzen, App beenden/neu starten → Zustand
+   und Theme müssen sofort wieder da sein.
 4. Power-Dreieck / Slider-Widget mit gekoppelten Werten.
 5. Formular-basierter Editier-Modus in der App (schreibt config.json).
-6. `electron-builder`-Packaging für eine `.exe` (dann greift der
-   userData-Config-Pfad produktiv). koffi ist N-API mit Prebuilds und
-   sollte problemlos packbar sein; `asarUnpack` für native Teile prüfen.
-7. **Praxistest v2.10 im Spiel:** Ein-/Aussteigen, Wiedereinstieg
-   (Restore), Ausparken + Einsteigen (fresh), Theme-Wechsel. Konsolen-Log
-   `[gamelog] {...}` zeigt jedes Event.
+6. ~~`electron-builder`-Packaging~~ → erledigt (Commit `bef1fff`, war im
+   Handover nicht nachgetragen): `npm run dist` / `dist:portable` /
+   `dist:installer` / `dist:dir` → `release/`; koffi per `asarUnpack`,
+   nur win32_x64-Prebuild. Details in README und `electron-builder.yml`.
+7. ~~Praxistest v2.10 im Spiel~~ → Erkennung mit Log vom 2026-09-28 belegt
+   (Abschnitt 6). Offen bleiben die nicht geloggten Fälle: Tod,
+   Zerstörung, Spielneustart, Wiedereinstieg nach erneutem Ausparken.
 8. Hersteller-Logos/Grafiken einbauen, sobald der Nutzer sie liefert
    (`src/themes/assets/`, per `import` in `art.logo`).
 9. ~~Weitere Ship-Themes~~ → v2.11 (AEGS, ANVL, CRUS, DRAK, KRIG, ORIG,
-   ORIG_M80, RSI_Constellation). Praxistest im Spiel steht aus (Klassennamen,
-   Wirkung auf dem Edge).
+   ORIG_M80, RSI_Constellation). Klassennamen in v2.12 belegt; Rückmeldung
+   des Nutzers zur Wirkung auf dem Edge steht noch aus.
 10. ~~Eigene Schriften~~ → VT323 + Share Tech Mono gebündelt (v2.11).
 
 ## 12. Bisheriger Gesprächsverlauf (Kurzfassung, chronologisch)
@@ -562,6 +644,15 @@ Hold ist kein zweites Toggle).
     gleich). 80 Unit-Tests + 3 UI-Suiten grün (UI-Suite prüft zusätzlich
     Modell-Theme RSI_Constellation über RSI).
 
+16. **Packaging** (Commit `bef1fff`, ohne Handoff-Update): electron-builder,
+    NSIS-Installer + portable .exe, `scripts/build.mjs`.
+17. **v2.12**: Nutzer liefert neue Game.log (Session mit allen Theme-
+    Schiffen) → per Replay durch den echten Parser geprüft: alles korrekt,
+    als Fixture-Test übernommen. Dann Persistenz der Per-Schiff-Zustände:
+    Cursor-Konzept (Session + Zeile je Event), Snapshot in userData,
+    Event-Queue beim Start; behebt nebenbei den Hot-Reload-Replay-Bug.
+    94 Unit-Tests + 3 UI-Suiten grün.
+
 ## 13. Hinweise für den nächsten Agenten
 
 - Nutzer ist **fit in JavaScript**, etwas Erfahrung mit AutoHotkey. Mag
@@ -581,6 +672,13 @@ Hold ist kein zweites Toggle).
   scancodeSender.js, gamelog.js, store.js, gameEvents.js und
   configValidation.js sind eng verzahnt (Key-Namensschema, Event-Typen,
   Config-Schema, IPC-Kanäle `config-changed` / `game-event`).
+- **Jedes Event trägt `{ session, line }`**, und der Renderer überspringt
+  Bekanntes. Wer neue Event-Quellen baut (nicht aus einer Log-Zeile), muss
+  sie entweder ohne `session` schicken (gilt immer) oder eine eindeutige
+  Position vergeben – sonst werden sie fälschlich übersprungen.
+- Der Parser darf **pro Zeile höchstens ein Event** erzeugen (sonst ist die
+  Zeilennummer keine eindeutige Position mehr → der Cursor-Skip verschluckt
+  das zweite).
 - Bei Änderungen am Event-Schema beide Seiten + beide Testebenen anfassen:
   `gamelog.js`/`gamelog.test.js` (Main) und
   `gameEvents.js`/`gameEvents.test.mjs`/`gamelog.render.test.py` (Renderer).

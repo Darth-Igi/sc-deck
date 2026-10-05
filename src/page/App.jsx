@@ -12,6 +12,7 @@ export default function App() {
   const loaded = useDeckStore((s) => s.loaded);
   const configError = useDeckStore((s) => s.configError);
   const loadConfig = useDeckStore((s) => s.loadConfig);
+  const init = useDeckStore((s) => s.init);
   const quit = useDeckStore((s) => s.quit);
   const ship = useShipTheme();
   const hud = ship.colors;
@@ -19,7 +20,10 @@ export default function App() {
   const handleGameEvent = useDeckStore((s) => s.handleGameEvent);
 
   useEffect(() => {
-    loadConfig();
+    init();
+  }, [init]);
+
+  useEffect(() => {
     // Config hot reload: reload when config.json changes.
     // onConfigChanged returns a cleanup function (unsubscribes the listener).
     if (window.scDeck.onConfigChanged) {

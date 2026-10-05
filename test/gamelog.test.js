@@ -3,7 +3,13 @@ const assert = require("assert");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { createGameLogParser, createGameLogTailer, parseShipChannel } = require("../gamelog");
+const {
+  createGameLogParser,
+  createGameLogTailer,
+  createGameLogPipeline,
+  parseShipChannel,
+  sessionIdOf,
+} = require("../gamelog");
 
 let passed = 0;
 const pending = [];
@@ -346,6 +352,101 @@ test("replay of a real session: Starlancer -> Apollo -> leave -> re-board", () =
   );
 });
 
+// Real session 2026-09-28 (test/fixtures, ship-relevant lines only, handle
+// replaced): every manufacturer with a theme, boarded once each, M80 twice.
+// Pins the channel display names -> class names that the themes are keyed on.
+const SESSION_0928 = fs
+  .readFileSync(path.join(__dirname, "fixtures", "session-2026-09-28.log"), "utf-8")
+  .split(/\r?\n/)
+  .filter(Boolean);
+
+test("replay of a real session 2026-09-28: class names, fresh/restore, every exit logged", () => {
+  const { events, parser } = collect();
+  SESSION_0928.forEach((l) => parser.feedLine(l));
+  const boardings = events.filter((e) => e.type === "vehicle-changed");
+  assert.deepStrictEqual(
+    boardings.map((e) => [e.vehicleClass, e.instanceId, e.fresh]),
+    [
+      ["ORIG_M80", "848671165705", true],
+      ["ORIG_M80", "848671165705", false], // re-boarded without retrieval
+      ["ORIG_400i", "849032503426", true],
+      ["ANVL_F7A_Hornet_Mk_II", "849589333732", true],
+      ["AEGS_Gladius", "849961812176", true],
+      ["AEGS_Sabre", "849753131675", true],
+      ["CRUS_A1_Spirit", "849547347575", true],
+      ["DRAK_Corsair", "849202573030", true],
+      ["KRIG_L-21_Wolf", "849132744946", true],
+      ["KRIG_L-22_Alpha_Wolf", "850123996035", true],
+      ["RSI_Aurora_Mk_II", "849753257297", true],
+      ["RSI_Constellation_Andromeda", "849980955387", true],
+    ]
+  );
+  assert.ok(boardings.every((e) => e.owner === "TestPilot"));
+  // ClearDriver confirmed every instance ID - nothing left pending/corrected
+  const lefts = events.filter((e) => e.type === "vehicle-left");
+  assert.strictEqual(lefts.length, boardings.length, "each boarding has its exit");
+  assert.strictEqual(parser.getState().currentVehicleId, null);
+  assert.strictEqual(parser.getState().pendingSpawnId, null);
+});
+
+// ---- Pipeline: session + line tagging ----
+function pipe() {
+  const events = [];
+  const pipeline = createGameLogPipeline({ onEvent: (e) => events.push(e), playerName: "TestPilot" });
+  const feed = (lines, from = 1) => lines.forEach((l, i) => pipeline.feedLine(l, from + i));
+  return { events, pipeline, feed };
+}
+const FIRST = "<2026-09-28T18:29:21.844Z> BackupNameAttachment=\" Build(12660092) 28 Sep 26\"";
+const FIRST_NEXT = "<2026-09-29T09:00:00.000Z> BackupNameAttachment=\" Build(12660092) 29 Sep 26\"";
+
+test("sessionIdOf: start timestamp of the first log line", () => {
+  assert.strictEqual(sessionIdOf(FIRST), "2026-09-28T18:29:21.844Z");
+  assert.strictEqual(sessionIdOf("no timestamp"), "no timestamp");
+});
+
+test("pipeline tags every event with session and line", () => {
+  const { events, feed } = pipe();
+  feed([FIRST, R.joined(STARLANCER), R.left(STARLANCER)]);
+  assert.deepStrictEqual(
+    events.map((e) => [e.type, e.session, e.line]),
+    [
+      ["vehicle-changed", "2026-09-28T18:29:21.844Z", 2],
+      ["vehicle-left", "2026-09-28T18:29:21.844Z", 3],
+    ]
+  );
+});
+
+test("pipeline: truncation resets with session null, new log gets its own session", () => {
+  const { events, pipeline, feed } = pipe();
+  feed([FIRST, R.joined(STARLANCER)]);
+  pipeline.truncate();
+  feed([FIRST_NEXT, R.joined(STARLANCER)]);
+  assert.deepStrictEqual(
+    events.map((e) => [e.type, e.session, e.line]),
+    [
+      ["vehicle-changed", "2026-09-28T18:29:21.844Z", 2],
+      ["session-reset", null, 0],
+      ["vehicle-changed", "2026-09-29T09:00:00.000Z", 2],
+    ]
+  );
+});
+
+test("pipeline: log replaced unnoticed (new first line) resets the session", () => {
+  const { events, pipeline, feed } = pipe();
+  feed([FIRST, R.joined(STARLANCER)]);
+  feed([FIRST_NEXT], 1); // tailer restarted at offset 0 (file was missing)
+  assert.strictEqual(events[1].type, "session-reset");
+  assert.strictEqual(events[1].session, "2026-09-29T09:00:00.000Z");
+  assert.strictEqual(pipeline.getState().currentVehicleId, null);
+});
+
+test("pipeline: the same log read from the start again is not a new session", () => {
+  const { events, feed } = pipe();
+  feed([FIRST, R.joined(STARLANCER)]);
+  feed([FIRST, R.joined(STARLANCER)], 1);
+  assert.ok(!events.some((e) => e.type === "session-reset"));
+});
+
 // ---- Tailer: real file on disk, short poll interval ----
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -353,6 +454,7 @@ testAsync("tailer reads appended lines, handles partial lines and truncation", a
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "scdeck-"));
   const file = path.join(dir, "Game.log");
   const lines = [];
+  const numbers = [];
   let truncations = 0;
   const statuses = [];
 
@@ -360,7 +462,7 @@ testAsync("tailer reads appended lines, handles partial lines and truncation", a
   const tailer = createGameLogTailer({
     filePath: file,
     pollMs: 40,
-    onLine: (l) => lines.push(l),
+    onLine: (l, n) => { lines.push(l); numbers.push(n); },
     onTruncate: () => truncations++,
     onStatus: (s) => statuses.push(s),
   });
@@ -381,6 +483,7 @@ testAsync("tailer reads appended lines, handles partial lines and truncation", a
   await sleep(120);
   assert.strictEqual(truncations, 1, "truncation must be detected");
   assert.strictEqual(lines[lines.length - 1], "fresh session");
+  assert.deepStrictEqual(numbers, [1, 2, 3, 4, 1], "line numbers restart with the file");
   assert.ok(statuses.includes("watching"));
 
   tailer.stop();
