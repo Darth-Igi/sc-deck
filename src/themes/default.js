@@ -103,12 +103,16 @@ export default {
 
   // Decorative extras: CSS background layered over the deck background
   // (pattern/gradient/url(...)), an overlay drawn ABOVE everything (e.g.
-  // CRT scanlines; never catches pointer events) and an optional logo
-  // watermark (imported asset URL, e.g. `import logo from "./assets/rsi.svg"`).
+  // CRT scanlines; never catches pointer events) and a logo watermark
+  // centered in every panel.
   art: {
     background: null,
     overlay: null,
-    logo: null,
+    logo: null,               // null = automatic: src/themes/assets/<prefix>.svg
+                              // (see logos.js); false = none; or a URL
+    logoColor: "line",        // logo as a silhouette in this color (most
+                              // source logos are black); null = original colors
+    logoHeight: 200,          // px, max; shrinks to fit smaller panels
     logoOpacity: 0.12,
   },
 

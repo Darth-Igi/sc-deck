@@ -120,21 +120,6 @@ export default function App() {
         boxSizing: "border-box",
       }}
     >
-      {art.logo && (
-        <Box
-          component="img"
-          src={art.logo}
-          alt=""
-          sx={{
-            position: "absolute",
-            right: 24,
-            bottom: 28,
-            height: 120,
-            opacity: art.logoOpacity,
-            pointerEvents: "none",
-          }}
-        />
-      )}
       <PageNav />
 
       {/* Weight panel widths by column count, minimum factor 1 */}

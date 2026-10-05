@@ -1,7 +1,9 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.12 (Per-Schiff-Toggle-Zustände überleben einen App-Neustart;
-Klassennamen aller Theme-Hersteller mit echter Game.log belegt; davor v2.11:
+Stand: v2.13.1 (Hersteller-Logos als Wasserzeichen in Theme-Farbe, zentriert
+in jedem Panel; davor
+v2.12: Per-Schiff-Toggle-Zustände überleben einen App-Neustart, Klassennamen
+aller Theme-Hersteller mit echter Game.log belegt; v2.11:
 Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger, Origin 400i/M80, RSI
 Aurora/Constellation; v2.10: Schiffserkennung über den Schiffs-Chatkanal +
 Ship-Themes mit Hersteller-Fallback). Dieses Dokument
@@ -84,6 +86,11 @@ sc-deck/
 │   │   ├── resolve.js     pure: Präfix-Auflösung, Merge, Farbrollen
 │   │   ├── shape.js       pure: round/chamfer-Formen als sx
 │   │   ├── registry.js    Präfix → Theme (siehe Tabelle Abschnitt 7)
+│   │   ├── logos.js       NEU v2.13: lädt assets/*.svg per import.meta.glob
+│   │   │                  als Data-URLs (Präfix → Logo)
+│   │   ├── assets/        NEU v2.13: Logo-SVGs <Präfix>.svg vom Nutzer –
+│   │   │                  **gitignored** (Marken von CIG), Build läuft
+│   │   │                  auch ohne
 │   │   ├── ShipThemeProvider.jsx  baut MUI-Theme aus aktuellem Schiff,
 │   │   │                  Hook useShipTheme()
 │   │   ├── manufacturers/ AEGS, ANVL, CRUS, DRAK, KRIG, MISC, ORIG, RSI
@@ -107,9 +114,9 @@ sc-deck/
     │                             Legacy-Zonenpfad), Pipeline, Tailer
     ├── gameEvents.test.mjs       21 Unit-Tests: Reset-/Restore-/Leave-Logik,
     │                             Cursor, Snapshot
-    ├── themes.test.mjs           12 Unit-Tests (Präfix-Kette, Merge,
+    ├── themes.test.mjs           15 Unit-Tests (Präfix-Kette, Merge,
     │                             Farbrollen, Slot-Tippfehler-Check, echte
-    │                             Session → Theme-Kette)
+    │                             Session → Theme-Kette, Logo-Auswahl)
     ├── fixtures/
     │   └── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
     │                             echten Session (Handle → TestPilot), alle
@@ -444,6 +451,31 @@ Matching case-insensitive, nur an `_`-Grenzen.
   per inset-Shadow → kein Layout-Shift).
 - `art.overlay`: CSS-Hintergrund **über** allem (Scanlines),
   `pointer-events: none`.
+
+### Logos (NEU v2.13)
+- Dateien: `src/themes/assets/<Präfix>.svg`, Präfix in Parser-Schreibweise
+  wie die Theme-Keys (`AEGS`, `CNOU`, `XNAA`, … – nicht `AOPOA`/
+  `Consolidated_Outland`). Längster Präfix gewinnt (`logoFor`), also ist
+  ein Modell-Logo `ORIG_M80.svg` möglich. Funktioniert **unabhängig von
+  den Themes**: ARGO/BANU/… haben ein Logo, aber (noch) kein Theme → Logo
+  über dem Default-Look.
+- Ordner ist **gitignored** (Nutzerentscheidung). Deshalb kein `import`,
+  sondern `import.meta.glob` in `logos.js` – fehlende Dateien = kein Logo,
+  Build bricht nicht (verifiziert durch Build ohne Ordner).
+- Darstellung: **Silhouette per CSS-Maske** in `art.logoColor` (Rolle,
+  Default `"line"`), weil die meisten Quell-Logos schwarz/mehrfarbig sind
+  und auf dunklem Grund unsichtbar wären. `logoColor: null` → Originalfarben
+  als `<img>`. Weitere Slots: `art.logo` (`null` = automatisch, `false` =
+  aus, String = feste URL; `withLogo`), `art.logoHeight` (max. 200 px,
+  schrumpft auf ≤ 80 % Panelhöhe / 90 % Breite), `art.logoOpacity` (0.12).
+  Position: **zentriert in jedem Panel** (`Panel.jsx`, seit v2.13.1; vorher
+  einmal unten rechts in `App.jsx`), hinter den Widgets (Grid + Header-Titel
+  sind `position: relative` und malen dadurch darüber). UI-Test prüft ein
+  Logo pro Panel und Mittelpunkt = Panel-Mittelpunkt.
+- **Falle:** `mask-image` wird im CORS-Modus geladen – `file://`-URLs (so
+  lädt die gepackte App!) scheitern daran still. Deshalb werden die SVGs als
+  `?raw` geladen und als **Data-URL** (`svgDataUrl`) eingebettet (~100 KB
+  im Bundle).
 - **Gebündelte Schriften** (OFL, per `@fontsource/*` in `main.jsx`
   importiert, offline): `VT323` (DRAK), `Share Tech Mono` (ANVL). Theme-
   Dateien selbst importieren nichts (Node-Tests laden sie).
@@ -522,15 +554,15 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
   Anzeigenamen; `MANUFACTURER_CODES` ist für Hersteller ohne Theme
   (ARGO, CNOU, …) noch nicht im echten Log belegt.
 - Chamfer-Formen: nur deckende Füllungen, kein Glow (siehe Abschnitt 7).
-- Hersteller-Logos (`art.logo`) vorgesehen, aber noch keine Assets
-  (Nutzer liefert nach).
+- Logo-Dateien liegen nur lokal beim Nutzer (gitignored) – ein frischer
+  Clone baut, zeigt aber keine Logos.
 
 ## 10. Testing
 
 ```bash
-npm test        # 94 Unit-Tests: Config-Validierung (16), Game.log-Parser/
+npm test        # 97 Unit-Tests: Config-Validierung (16), Game.log-Parser/
                 # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
-                # Ship-Themes (12), Scancode (9). Reines Node,
+                # Ship-Themes + Logos (15), Scancode (9). Reines Node,
                 # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -541,7 +573,7 @@ python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.12 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.13 grün (Playwright gegen frischen Build).
 **Windows-Konsole:** Die Suiten geben `✓` aus – ohne
 `PYTHONIOENCODING=utf-8` (bzw. `chcp 65001`) bricht Python mit
 `UnicodeEncodeError` (cp1252) ab, obwohl der Test selbst grün wäre.
@@ -582,8 +614,9 @@ Hold ist kein zweites Toggle).
 7. ~~Praxistest v2.10 im Spiel~~ → Erkennung mit Log vom 2026-09-28 belegt
    (Abschnitt 6). Offen bleiben die nicht geloggten Fälle: Tod,
    Zerstörung, Spielneustart, Wiedereinstieg nach erneutem Ausparken.
-8. Hersteller-Logos/Grafiken einbauen, sobald der Nutzer sie liefert
-   (`src/themes/assets/`, per `import` in `art.logo`).
+8. ~~Hersteller-Logos~~ → v2.13 (15 Hersteller, Silhouette in Theme-Farbe).
+   Offen: Rückmeldung des Nutzers zu Größe/Deckkraft/Position auf dem Edge
+   (pro Theme über `art.logo*` einstellbar).
 9. ~~Weitere Ship-Themes~~ → v2.11 (AEGS, ANVL, CRUS, DRAK, KRIG, ORIG,
    ORIG_M80, RSI_Constellation). Klassennamen in v2.12 belegt; Rückmeldung
    des Nutzers zur Wirkung auf dem Edge steht noch aus.
@@ -652,6 +685,14 @@ Hold ist kein zweites Toggle).
     Cursor-Konzept (Session + Zeile je Event), Snapshot in userData,
     Event-Queue beim Start; behebt nebenbei den Hot-Reload-Replay-Bug.
     94 Unit-Tests + 3 UI-Suiten grün.
+18. **v2.13**: Nutzer liefert 15 Hersteller-Logos (SVG, teils schwarz,
+    teils mehrfarbig) und ignoriert den Ordner in Git. Silhouette per
+    CSS-Maske in Theme-Farbe (Vorschau aller Logos vorab geprüft),
+    Data-URLs wegen CORS/`file://`, Auswahl per Präfix auch ohne Theme.
+    97 Unit-Tests + 3 UI-Suiten grün.
+19. **v2.13.1**: Nutzerwunsch: Logos zentriert in jedem Panel statt einmal
+    unten rechts. Wasserzeichen von `App.jsx` nach `Panel.jsx` verschoben,
+    UI-Test um Zentrierungs-Check erweitert. Alle Suiten grün.
 
 ## 13. Hinweise für den nächsten Agenten
 

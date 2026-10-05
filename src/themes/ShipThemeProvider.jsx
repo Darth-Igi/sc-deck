@@ -3,7 +3,8 @@ import { CssBaseline, ThemeProvider, createTheme, useTheme } from "@mui/material
 import { useDeckStore } from "../store";
 import defaultTheme from "./default";
 import { SHIP_THEMES } from "./registry";
-import { resolveTheme } from "./resolve";
+import { LOGOS } from "./logos";
+import { resolveTheme, withLogo } from "./resolve";
 
 // Builds the MUI theme from a resolved ship theme. The ship theme itself
 // travels along as `theme.ship`, so plain components (useShipTheme) and
@@ -63,7 +64,10 @@ export function useShipTheme() {
 export default function ShipThemeProvider({ children }) {
   const vehicleClass = useDeckStore((s) => s.themePreview ?? s.currentVehicleClass);
   const muiTheme = useMemo(
-    () => buildMuiTheme(resolveTheme(vehicleClass, SHIP_THEMES, defaultTheme)),
+    () =>
+      buildMuiTheme(
+        withLogo(resolveTheme(vehicleClass, SHIP_THEMES, defaultTheme), vehicleClass, LOGOS)
+      ),
     [vehicleClass]
   );
   return (

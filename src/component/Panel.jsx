@@ -55,6 +55,45 @@ export default function Panel({ panel }) {
     ? `${solid(caps)} left center / 18px 3px no-repeat, ${solid(caps)} right center / 18px 3px no-repeat, ${solid(line)} center / 100% 1px no-repeat`
     : line;
 
+  // Logo watermark centered in the panel, behind the widgets; capped at
+  // art.logoHeight and shrunk to fit small panels
+  const { art } = t;
+  const logoBox = {
+    position: "absolute",
+    top: "50%",
+    left: "50%",
+    transform: "translate(-50%, -50%)",
+    height: `min(${art.logoHeight}px, 80%)`,
+    width: "90%",
+    opacity: art.logoOpacity,
+    pointerEvents: "none",
+  };
+  const logo =
+    art.logo &&
+    (art.logoColor ? (
+      // silhouette: the logo's shape as a mask over the theme color
+      <Box
+        data-logo
+        sx={{
+          ...logoBox,
+          bgcolor: c(art.logoColor),
+          maskImage: `url("${art.logo}")`,
+          maskSize: "contain",
+          maskRepeat: "no-repeat",
+          maskPosition: "center",
+          transition: `background-color ${fade}`,
+        }}
+      />
+    ) : (
+      <Box
+        data-logo
+        component="img"
+        src={art.logo}
+        alt=""
+        sx={{ ...logoBox, objectFit: "contain" }}
+      />
+    ));
+
   return (
     <Box
       sx={{
@@ -71,8 +110,10 @@ export default function Panel({ panel }) {
         transition: `background ${fade}, border-color ${fade}, box-shadow ${fade}`,
       }}
     >
+      {logo}
+
       {header ? (
-        <Box sx={{ mb: 1.5 }}>
+        <Box sx={{ position: "relative", mb: 1.5 }}>
           <Typography sx={{ ...titleSx, textAlign: p.titleAlign, pb: 0.75 }}>{title}</Typography>
           {/* explicit px: MUI's sx reads height 1 as 100% */}
           <Box sx={{ height: caps ? "3px" : "1px", background: dividerBg }} />
@@ -94,6 +135,8 @@ export default function Panel({ panel }) {
 
       <Box
         sx={{
+          // positioned so the widgets paint above the logo
+          position: "relative",
           flex: 1,
           display: "grid",
           gridTemplateColumns: `repeat(${panel.columns || 3}, 1fr)`,

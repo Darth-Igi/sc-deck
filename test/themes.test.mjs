@@ -2,7 +2,15 @@
 import assert from "assert";
 import { readFileSync } from "fs";
 import { createRequire } from "module";
-import { mergeTheme, themeChain, resolveTheme, themeColor } from "../src/themes/resolve.js";
+import {
+  mergeTheme,
+  themeChain,
+  resolveTheme,
+  themeColor,
+  logoFor,
+  withLogo,
+  svgDataUrl,
+} from "../src/themes/resolve.js";
 import defaultTheme from "../src/themes/default.js";
 import { SHIP_THEMES } from "../src/themes/registry.js";
 
@@ -83,6 +91,7 @@ const NULLABLE_SLOTS = {
   panel: ["titleMarker", "dividerCaps"],
   nav: ["arrowFill", "titleBorder", "titleMarker"],
   toggle: ["onTrackBorder", "offThumbBorder"],
+  art: ["logoColor"],
 };
 
 function checkSlots(label, theme) {
@@ -154,6 +163,34 @@ test("real session 2026-09-28: every boarded ship lands in its theme", () => {
     RSI_Aurora_Mk_II: ["RSI"],
     RSI_Constellation_Andromeda: ["RSI", "RSI_Constellation"],
   });
+});
+
+const LOGOS = { ORIG: "orig.svg", ORIG_M80: "m80.svg", ARGO: "argo.svg" };
+
+test("logoFor: longest prefix with a logo file, none without", () => {
+  assert.strictEqual(logoFor("ORIG_M80", LOGOS), "m80.svg");
+  assert.strictEqual(logoFor("ORIG_400i", LOGOS), "orig.svg");
+  assert.strictEqual(logoFor("argo_MOLE", LOGOS), "argo.svg"); // case-insensitive
+  assert.strictEqual(logoFor("DRAK_Corsair", LOGOS), null);
+  assert.strictEqual(logoFor(null, LOGOS), null);
+  assert.strictEqual(logoFor("ORIG_M80", {}), null); // assets folder missing
+});
+
+test("withLogo: automatic only while the theme leaves art.logo at null", () => {
+  const auto = resolveTheme("ORIG_400i", SHIP_THEMES, defaultTheme);
+  assert.strictEqual(auto.art.logo, null, "no theme hard-codes a logo");
+  assert.strictEqual(withLogo(auto, "ORIG_400i", LOGOS).art.logo, "orig.svg");
+  const off = mergeTheme(auto, { art: { logo: false } });
+  assert.strictEqual(withLogo(off, "ORIG_400i", LOGOS).art.logo, false);
+  const fixed = mergeTheme(auto, { art: { logo: "custom.svg" } });
+  assert.strictEqual(withLogo(fixed, "ORIG_400i", LOGOS).art.logo, "custom.svg");
+  assert.strictEqual(withLogo(defaultTheme, null, LOGOS).art.logo, null, "default look: no logo");
+});
+
+test("svgDataUrl: encodes quotes and hashes (usable inside url(\"...\"))", () => {
+  const url = svgDataUrl('<svg fill="#000"><path d="M0 0"/></svg>');
+  assert.ok(url.startsWith("data:image/svg+xml;charset=utf-8,"));
+  assert.ok(!/["#<>]/.test(url.slice(url.indexOf(",") + 1)));
 });
 
 test("font scale is a positive number in every theme", () => {

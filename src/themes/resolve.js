@@ -52,6 +52,26 @@ export function resolveTheme(vehicleClass, registry, base) {
   return { ...merged, chain };
 }
 
+// Logo watermark of a vehicle class: like the themes, the longest prefix
+// with a logo file wins ("ORIG_M80" -> ORIG_M80.svg, else ORIG.svg).
+export function logoFor(vehicleClass, logos) {
+  const chain = themeChain(vehicleClass, logos);
+  return chain.length ? logos[chain[chain.length - 1]] : null;
+}
+
+// art.logo: null = automatic (logo file by prefix), false = none, string =
+// explicit URL set by the theme.
+export function withLogo(theme, vehicleClass, logos) {
+  if (theme.art.logo !== null) return theme;
+  return { ...theme, art: { ...theme.art, logo: logoFor(vehicleClass, logos) } };
+}
+
+// SVG source -> data URL. Logos are inlined because CSS mask-image is
+// fetched in CORS mode, which file:// URLs (packaged app) never pass.
+export function svgDataUrl(svg) {
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
 // Color value -> CSS color. Role names ("line", "danger", "active" ...)
 // resolve against the theme's palette; anything else (hex, rgba, CSS
 // names) passes through. Used for theme slots AND for per-widget colors

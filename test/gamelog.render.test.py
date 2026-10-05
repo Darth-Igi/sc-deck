@@ -147,6 +147,29 @@ with sync_playwright() as p:
     assert body_bg() == default_bg, "leaving the ship must restore the default look"
     assert button_radius("SELF DESTRUCT") == default_btn
 
+    # Logo watermark: only with a ship, picked by prefix from
+    # src/themes/assets (gitignored - without the files: no logo, no crash)
+    assert pg.locator("[data-logo]").count() == 0, "default look has no logo"
+    pg.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'ORIG_400i:P', vehicleClass:'ORIG_400i', shipName:'Origin 400i', fresh:false})")
+    pg.wait_for_timeout(300)
+    if os.path.exists("src/themes/assets/ORIG.svg"):
+        mask = pg.evaluate("getComputedStyle(document.querySelector('[data-logo]')).maskImage")
+        assert mask.startswith('url("data:image/svg+xml'), f"logo must be an inlined mask, got {mask[:60]}"
+        # one logo per panel, centered in it
+        offsets = pg.evaluate("""[...document.querySelectorAll('[data-logo]')].map(l => {
+            const a = l.getBoundingClientRect(), b = l.parentElement.getBoundingClientRect();
+            return [Math.abs((a.left + a.right) - (b.left + b.right)) / 2,
+                    Math.abs((a.top + a.bottom) - (b.top + b.bottom)) / 2];
+        })""")
+        panels = pg.evaluate("document.querySelector('[data-logo]').parentElement.parentElement.children.length")
+        assert len(offsets) == panels, f"expected one logo per panel, got {len(offsets)} for {panels}"
+        assert all(dx < 1 and dy < 1 for dx, dy in offsets), f"logos must be centered: {offsets}"
+    else:
+        assert pg.locator("[data-logo]").count() == 0
+    pg.evaluate("window.__fire({type:'vehicle-left', vehicleId:'ORIG_400i:P'})")
+    pg.wait_for_timeout(300)
+    assert pg.locator("[data-logo]").count() == 0, "logo disappears with the ship"
+
     # The dev theme picker must not ship in production builds
     assert pg.get_by_text("DEV THEME", exact=False).count() == 0
 
