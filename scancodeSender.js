@@ -141,6 +141,12 @@ function buildTimedSequence(keys, { keyDelayMs, holdMs }) {
 
 // ---- FFI part (win32 only) ----
 
+// Tag in KEYBDINPUT.dwExtraInfo on every event we inject. The input hook
+// (inputHook.js) drops events carrying it - so the deck's own key presses
+// are not mistaken for physical input, while keys injected by OTHER tools
+// (Joystick Gremlin, AHK ...) still count. ASCII "SDCK".
+const DECK_EXTRA_INFO = 0x5344434b;
+
 const KEYEVENTF_EXTENDEDKEY = 0x0001;
 const KEYEVENTF_KEYUP = 0x0002;
 const KEYEVENTF_SCANCODE = 0x0008;
@@ -202,7 +208,7 @@ function createScancodeSender(opts = {}) {
     return {
       type: INPUT_KEYBOARD,
       u: {
-        ki: { wVk: 0, wScan: ev.scan, dwFlags: flags, time: 0, dwExtraInfo: 0 },
+        ki: { wVk: 0, wScan: ev.scan, dwFlags: flags, time: 0, dwExtraInfo: DECK_EXTRA_INFO },
       },
     };
   }
@@ -241,5 +247,6 @@ module.exports = {
   buildInputSequence,
   buildTimedSequence,
   MAX_HOLD_MS,
+  DECK_EXTRA_INFO,
   createScancodeSender,
 };

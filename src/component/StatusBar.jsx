@@ -35,6 +35,43 @@ function DevThemePicker() {
   );
 }
 
+// Phase B debug line (config.input.debug): hook/device status + the last
+// physical inputs, to verify on the target machine that keys and joystick
+// buttons arrive while the game has focus.
+function describeInput(ev) {
+  const arrow = ev.down ? "↓" : "↑";
+  if (ev.source === "keyboard") {
+    return `KB ${ev.key}${arrow}${ev.injected ? " (INJ)" : ""}`;
+  }
+  return `JS${ev.slot} ${ev.name} B${ev.button}${arrow}`;
+}
+
+function InputDebug() {
+  const cfg = useDeckStore((s) => s.inputConfig);
+  const hookState = useDeckStore((s) => s.keyboardHookState);
+  const devices = useDeckStore((s) => s.joystickDevices);
+  const lastInputs = useDeckStore((s) => s.lastInputs);
+  const hud = useShipTheme().colors;
+  const parts = [];
+  if (cfg.keyboard) parts.push(`KB: ${(hookState ?? "starting").toUpperCase()}`);
+  if (cfg.joystick) {
+    parts.push(
+      devices.length
+        ? `JS: ${devices.map((d) => `${d.slot}=${d.name} [${d.buttons}]`).join(", ")}`
+        : "JS: NONE (PRESS A BUTTON)"
+    );
+  }
+  parts.push(lastInputs.length ? lastInputs.map(describeInput).join(" · ") : "NO INPUT YET");
+  return (
+    <Typography
+      data-input-debug
+      sx={{ fontSize: "0.6rem", letterSpacing: "0.1em", color: hud.warn, whiteSpace: "nowrap" }}
+    >
+      INPUT · {parts.join(" | ")}
+    </Typography>
+  );
+}
+
 // Slim status bar: makes the last error visible - there is no console
 // on the Edge while running fullscreen.
 export default function StatusBar() {
@@ -42,6 +79,7 @@ export default function StatusBar() {
   const gameStatus = useDeckStore((s) => s.gameStatus);
   const currentVehicleName = useDeckStore((s) => s.currentVehicleName);
   const gamelogState = useDeckStore((s) => s.gamelogState);
+  const inputDebug = useDeckStore((s) => Boolean(s.inputConfig.debug));
   const hud = useShipTheme().colors;
 
   // Game.log info: current ship if known, otherwise the last event;
@@ -69,6 +107,7 @@ export default function StatusBar() {
         SC DECK · QUIT: CTRL+ALT+Q OR ⏻
         {gameInfo ? ` · ${gameInfo}` : ""}
       </Typography>
+      {inputDebug && <InputDebug />}
       {import.meta.env.DEV && <DevThemePicker />}
       {lastError && (
         <Typography sx={{ fontSize: "0.6rem", letterSpacing: "0.1em", color: hud.danger }}>

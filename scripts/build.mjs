@@ -43,7 +43,9 @@ const UNIT_TESTS = [
   "test/configValidation.test.js",
   "test/gamelog.test.js",
   "test/gameEvents.test.mjs",
+  "test/themes.test.mjs",
   "test/scancode.test.js",
+  "test/input.test.mjs",
 ];
 
 let step = 0;

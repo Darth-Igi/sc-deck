@@ -1,7 +1,8 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.14 (Power-Seite: je System +1/−1/On-Off übereinander, Halten =
-MAX/MIN per langem Tastendruck; davor v2.13.1: Hersteller-Logos als
+Stand: v2.15 (Phase B: physische Tastatur- und Joystick-Eingaben mitlesen,
+vorerst nur Debug-Anzeige; davor v2.14: Power-Seite, je System
++1/−1/On-Off übereinander, Halten = MAX/MIN per langem Tastendruck; v2.13.1: Hersteller-Logos als
 Wasserzeichen in Theme-Farbe, zentriert in jedem Panel; v2.12: Per-Schiff-Toggle-Zustände überleben einen App-Neustart, Klassennamen
 aller Theme-Hersteller mit echter Game.log belegt; v2.11:
 Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger, Origin 400i/M80, RSI
@@ -58,6 +59,11 @@ sc-deck/
 ├── configValidation.js    Reines Node-Modul, prüft config.json inkl.
 │                          gamelog-Abschnitt; Key-Namen werden gegen die
 │                          Scancode-Tabelle validiert (injiziert)
+├── inputHook.js           NEU v2.15: Tastatur-Hook (Main): Rohdaten →
+│                          Key-Namen, Filter eigene Tasten/Auto-Repeat
+│                          (pure Teile getestet) + Worker-Steuerung
+├── inputHookWorker.js     NEU v2.15: WH_KEYBOARD_LL im Worker-Thread mit
+│                          eigener GetMessage-Schleife (koffi)
 ├── gamelog.js             Game.log-Parser + Polling-Tailer + Pipeline
 │                          (Session/Zeile je Event, v2.12; Electron-frei,
 │                          unit-testbar; siehe Abschnitt 6)
@@ -77,6 +83,8 @@ sc-deck/
 │   │                      Speichern (v2.12), themePreview (Dev),
 │   │                      handleGameEvent, triggerButton/-Toggle,
 │   │                      resetToggles, correctToggle
+│   ├── joystick.js        NEU v2.15: Gamepad-API-Polling, pure
+│   │                      Button-Diff (1-basiert wie SC) + ID-Parser
 │   ├── gameEvents.js      pure Logik Event → Toggle-Update, Cursor,
 │   │                      Snapshot (snapshotOf/restoreSnapshot)
 │   ├── useLongPress.js    useLongPress (Guard für Quit/Reset) +
@@ -110,8 +118,8 @@ sc-deck/
 │       └── StatusBar.jsx  Letzter Fehler + Game.log-Info (SHIP: …) +
 │                          manuelle Korrekturen + Dev-Theme-Wähler
 └── test/
-    ├── configValidation.test.js  19 Unit-Tests (inkl. gamelog, accent,
-    │                             hold, rows/columns)
+    ├── configValidation.test.js  20 Unit-Tests (inkl. gamelog, accent,
+    │                             hold, rows/columns, input)
     ├── gamelog.test.js           36 Unit-Tests: Parser (Kanal-Pfad mit
     │                             echten Log-Zeilen, Session-Replays,
     │                             Legacy-Zonenpfad), Pipeline, Tailer
@@ -124,13 +132,16 @@ sc-deck/
     │   └── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
     │                             echten Session (Handle → TestPilot), alle
     │                             Theme-Hersteller
+    ├── input.test.mjs            9 Unit-Tests (v2.15): Scancode→Name,
+    │                             Filter (eigene Tasten, Repeat, Fremd-
+    │                             Injection), Gamepad-ID, Button-Diff
     ├── scancode.test.js          10 Unit-Tests (Mapping, Flags,
     │                             Sequenz + Timing, Namensstabilität,
     │                             Struct-Layout)
     ├── render.test.py            Playwright headless: Rendering, Toggle
     │                             (Tap + Long-Press-Korrektur), Nav,
     │                             Reset, Power-Seite (Spalten, Tap/Hold),
-    │                             Quit, Error-Screen
+    │                             Input-Debug-Zeile, Quit, Error-Screen
     ├── hotreload.test.py         Playwright: Hot-Reload behält Seite/Toggle
     ├── gamelog.render.test.py    Game-Events + Theme-Wechsel in der UI,
     │                             Persistenz (Queue, Restore, Cursor, Save)
@@ -397,6 +408,48 @@ nichts übernommen. Ohne aktiviertes Game.log-Tracking wird nichts gespeichert.
 Die ausgelieferte `config.json` ist inzwischen die **echte Nutzer-Config**
 (gamelog enabled, reale Binds) – keine Platzhalter mehr.
 
+## 6b. Physische Eingaben mitlesen (NEU v2.15, Phase B – Prototyp)
+
+Ziel (Phase C): Toggle-Zustände auch dann nachführen, wenn der Nutzer die
+Aktion **an Tastatur oder Joystick** auslöst statt am Deck. Phase B liefert
+nur die Rohdaten + eine Debug-Zeile in der StatusBar.
+
+Config (alles opt-in, Default aus):
+```json
+"input": { "keyboard": true, "joystick": true, "debug": true }
+```
+
+- **Tastatur** (`inputHook.js` + `inputHookWorker.js`, Main-Prozess):
+  `WH_KEYBOARD_LL` per koffi in einem **eigenen Worker-Thread**, der in
+  `GetMessageW` blockiert. Grund: Windows ruft den Hook für jeden
+  Tastendruck systemweit auf dem installierenden Thread auf – ein
+  beschäftigter Electron-Main-Thread würde die Tastatur überall verzögern,
+  und Windows entfernt den Hook still nach `LowLevelHooksTimeout`.
+  Gemessen: Callback ~30 µs, Tastenversand unverändert. Stop per
+  `PostThreadMessageW(WM_QUIT)`. Der Hook hört nur zu (`CallNextHookEx`).
+- **Eigene Tasten** werden über `dwExtraInfo` = `DECK_EXTRA_INFO`
+  ("SDCK", gesetzt in `scancodeSender.js`) erkannt und verworfen – **nicht**
+  über `LLKHF_INJECTED`, denn Tasten von Joystick Gremlin/AHK sind ebenfalls
+  injiziert und sollen zählen (Debug zeigt sie mit „(INJ)“). Auto-Repeat
+  wird verworfen, nur echte Down/Up-Wechsel. Namen = SCANCODES-Schema
+  (Aliase → erster Name, z. B. LeftWin).
+- **Joystick** (`src/joystick.js`, Renderer): Chromium-Gamepad-API, Polling
+  alle 16 ms. Button-Nummer **1-basiert** = SC-Zählung (`js3_button13`).
+  Vendor/Product aus der Gamepad-ID passen zur GUID in `actionmaps.xml`
+  (`{0200231D-…}` = Product 0200, Vendor 231D) → Zuordnung js1–js3 in
+  Phase C darüber.
+- **Datenschutz:** technisch ein globaler Key-Listener → opt-in, Events
+  gehen nur per IPC `input-event` an den Renderer, nie in Datei/Konsole.
+- **Verifiziert (Entwicklungsrechner = Zielsystem):** Hook in Electron,
+  Filter eigener Tasten (0 Events), Fremd-Injection sichtbar, Repeat
+  verworfen, Worker lädt auch aus `app.asar` (dist:dir).
+- **Offen – nur der Nutzer kann es prüfen:** (1) Kommen Tasten an, während
+  **SC im Vordergrund** ist (läuft SC als Admin, muss das Deck es auch –
+  UIPI)? (2) Liefert die Gamepad-API Daten, während das Deck-Fenster
+  **keinen Fokus** hat? (3) Erscheinen alle VKB-Geräte (Chromium: max. 4,
+  erst nach einem Tastendruck am Gerät) mit allen Buttons? Fallback, falls
+  (2)/(3) scheitern: Raw Input (HID) per koffi im Worker.
+
 ## 7. Ship-Themes (NEU v2.10)
 
 **Ziel:** Jedes Schiff kann ein eigenes Styling haben (Farben, Formen,
@@ -579,9 +632,9 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
 ## 10. Testing
 
 ```bash
-npm test        # 101 Unit-Tests: Config-Validierung (19), Game.log-Parser/
+npm test        # 111 Unit-Tests: Config-Validierung (20), Game.log-Parser/
                 # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
-                # Ship-Themes + Logos (15), Scancode (10). Reines Node,
+                # Ship-Themes + Logos (15), Scancode (10), Input (9). Reines Node,
                 # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -592,7 +645,7 @@ python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.14 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.15 grün (Playwright gegen frischen Build).
 **Windows-Konsole:** Die Suiten geben `✓` aus – ohne
 `PYTHONIOENCODING=utf-8` (bzw. `chcp 65001`) bricht Python mit
 `UnicodeEncodeError` (cp1252) ab, obwohl der Test selbst grün wäre.
@@ -646,11 +699,8 @@ Hold ist kein zweites Toggle).
    - **Im Spiel zu prüfen:** reicht 800 ms für MAX/MIN; `initial: true` der
      Power-Toggles (Schiff frisch ausgeparkt = an?); Flight Ready (R)
      schaltet Power ohne Wissen des Decks.
-   - **Phase B (offen):** Prototyp „Eingaben mitlesen“ – Tastatur per
-     `WH_KEYBOARD_LL` (koffi, Main; eigene Events per `LLKHF_INJECTED`
-     filtern), Joysticks per Chromium-Gamepad-API im Renderer (Risiko:
-     liefert sie ohne Fensterfokus? alle VKB-Buttons?; Fallback Raw Input).
-     Erst nur Debug-Ausgabe in der StatusBar.
+   - **Phase B (v2.15, Prototyp gebaut):** siehe Abschnitt 6b. Wartet auf
+     den Praxistest des Nutzers (Debug-Zeile in der StatusBar).
    - **Phase C (offen):** `actionmaps.xml` parsen (`js1`–`js3` ↔ Geräte
      per Product-GUID, `kb1_`) + Default-Tabelle für Nicht-Umgelegtes →
      physische Eingaben auf Toggle-Zustände abbilden (Tap/Hold nachbilden:
@@ -751,6 +801,12 @@ Hold ist kein zweites Toggle).
     Tastendruck), Panel-Option `rows` (Spalten wie im MFD), Seite POWER.
     Bestehende Seiten pixelgleich (nur Seitenzähler 1/3 → 1/4).
     101 Unit-Tests + 3 UI-Suiten grün. Nächstes: Phase B (Eingaben mitlesen).
+21. **v2.15**: Phase B. Erst Spike auf dem Zielsystem (Hook im Worker,
+    Timing, Injected-Flag), dann eingebaut: `inputHook.js`/-Worker,
+    `src/joystick.js`, Debug-Zeile, Config `input`. Eigene Tasten per
+    `dwExtraInfo` markiert. `scripts/build.mjs` führt jetzt auch
+    `themes.test.mjs` aus (fehlte). 111 Unit-Tests + 3 UI-Suiten grün,
+    Hook auch aus asar geprüft. Nutzer-Config: `input` aktiviert für Test.
 
 ## 13. Hinweise für den nächsten Agenten
 

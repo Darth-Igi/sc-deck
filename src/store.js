@@ -13,6 +13,9 @@ import {
 // documented; per widget overridable via "hold.holdMs" (config.json).
 export const DEFAULT_BUTTON_HOLD_MS = 800;
 
+// Physical input events kept for the debug display
+const INPUT_HISTORY = 4;
+
 let initStarted = false;
 
 export const useDeckStore = create((set, get) => ({
@@ -47,6 +50,25 @@ export const useDeckStore = create((set, get) => ({
   ready: false,
   eventQueue: [],
   pendingSnapshot: null,
+
+  // ---- Physical input (Phase B prototype: debug display only) ----
+  inputConfig: {},           // config.input: { keyboard, joystick, debug }
+  keyboardHookState: null,   // "running" | "failed" | "stopped" | "off"
+  joystickDevices: [],       // [{ slot, name, vendor, product, buttons }]
+  lastInputs: [],            // newest first, max INPUT_HISTORY entries
+
+  // Key transitions from the main process hook, button transitions from
+  // the joystick poller. For now only recorded for the status bar.
+  handleInputEvent: (event) => {
+    if (event.type === "input-status") {
+      set({ keyboardHookState: event.state });
+      return;
+    }
+    set((state) => ({
+      lastInputs: [{ ...event, time: Date.now() }, ...state.lastInputs].slice(0, INPUT_HISTORY),
+    }));
+  },
+  setJoystickDevices: (devices) => set({ joystickDevices: devices }),
 
   // Dev-only theme preview (StatusBar picker, `npm run dev`): a vehicle
   // class that overrides the detected ship for theming only.
@@ -154,6 +176,7 @@ export const useDeckStore = create((set, get) => ({
 
     set({
       pages: result.config.pages,
+      inputConfig: result.config.input ?? {},
       toggleStates,
       loaded: true,
       configError: null,

@@ -1,6 +1,6 @@
 {
   "name": "sc-deck",
-  "version": "2.14.0",
+  "version": "2.15.0",
   "description": "Custom touch control surface for the CORSAIR XENEON EDGE (React + Zustand + MUI); sends key combinations to the system (e.g. for Star Citizen)",
   "main": "main.js",
   "scripts": {
@@ -11,7 +11,7 @@
     "dist:portable": "node scripts/build.mjs --portable",
     "dist:installer": "node scripts/build.mjs --installer",
     "dist:dir": "node scripts/build.mjs --dir --skip-tests",
-    "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/themes.test.mjs && node test/scancode.test.js",
+    "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/themes.test.mjs && node test/scancode.test.js && node test/input.test.mjs",
     "test:ui": "npm run build && python test/render.test.py && python test/hotreload.test.py && python test/gamelog.render.test.py"
   },
   "dependencies": {

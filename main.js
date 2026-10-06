@@ -13,6 +13,7 @@ const {
   createGameLogTailer,
   DEFAULT_LOG_PATH,
 } = require("./gamelog");
+const { createKeyboardHook } = require("./inputHook");
 
 // Key dispatch: SendInput with KEYEVENTF_SCANCODE (see scancodeSender.js).
 // Replaces the former nut.js path entirely - nut.js sent virtual keys
@@ -145,7 +146,11 @@ function createWindow() {
   // reloaded window gets the replayed startup events too (which prime
   // "which ship are we in"; the freshly loaded UI is at its initial state,
   // so replaying is harmless).
-  mainWindow.webContents.on("did-finish-load", () => restartGameLog());
+  mainWindow.webContents.on("did-finish-load", () => {
+    restartGameLog();
+    // the hook may have started before the page could listen
+    sendInputEvent({ type: "input-status", source: "keyboard", state: keyboardHookState });
+  });
 }
 
 app.whenReady().then(() => {
@@ -162,6 +167,7 @@ app.whenReady().then(() => {
   // Config hot reload: pick up changes to the active config.json
   // immediately (fs.watch may fire multiple times per save -> debounce).
   watchConfig();
+  updateKeyboardHook();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -190,6 +196,7 @@ function watchConfig() {
         }
         // gamelog settings (enabled/path/patterns) may have changed too
         restartGameLog();
+        updateKeyboardHook();
       }, 150);
     });
   } catch (err) {
@@ -242,11 +249,54 @@ function restartGameLog() {
   });
 }
 
+// ---- Physical input listener (opt-in: config.input.keyboard) ----
+// Phase B prototype: physical key presses are forwarded to the renderer
+// (debug display in the status bar); later they update toggle states.
+// Joysticks are read in the renderer (Gamepad API), not here.
+let keyboardHook = null;
+let keyboardHookState = "off";
+
+function setKeyboardHookState(state) {
+  keyboardHookState = state;
+  sendInputEvent({ type: "input-status", source: "keyboard", state });
+}
+
+function sendInputEvent(payload) {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send("input-event", payload);
+  }
+}
+
+// (Re)evaluated on startup and config hot reload; only touches the hook
+// when the setting actually changes (no gap in listening on every save).
+function updateKeyboardHook() {
+  const result = loadConfigSafe();
+  const wanted = Boolean(result.ok && result.config.input?.keyboard);
+  if (wanted === Boolean(keyboardHook)) return;
+
+  if (!wanted) {
+    keyboardHook.stop();
+    keyboardHook = null;
+    setKeyboardHookState("off");
+    return;
+  }
+  try {
+    keyboardHook = createKeyboardHook({
+      onEvent: (ev) => sendInputEvent({ type: "input", ...ev }),
+      onStatus: setKeyboardHookState,
+    });
+  } catch (err) {
+    console.error("[input] keyboard hook unavailable:", err.message);
+    setKeyboardHookState("failed");
+  }
+}
+
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   clearTimeout(watchDebounce); // pending debounce must not fire into teardown
   if (configWatcher) configWatcher.close();
   if (gamelogTailer) gamelogTailer.stop();
+  if (keyboardHook) keyboardHook.stop();
 });
 
 app.on("window-all-closed", () => {

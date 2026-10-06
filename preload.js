@@ -15,6 +15,13 @@ contextBridge.exposeInMainWorld("scDeck", {
   },
   // Game.log events (vehicle changed/destroyed, player killed, session
   // reset, watcher status) - only fires when config.gamelog.enabled is true
+  // Physical input (config.input.keyboard): key transitions from the
+  // low-level keyboard hook + hook status
+  onInputEvent: (callback) => {
+    const listener = (_event, payload) => callback(payload);
+    ipcRenderer.on("input-event", listener);
+    return () => ipcRenderer.removeListener("input-event", listener);
+  },
   onGameEvent: (callback) => {
     const listener = (_event, payload) => callback(payload);
     ipcRenderer.on("game-event", listener);

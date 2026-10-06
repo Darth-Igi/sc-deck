@@ -114,6 +114,12 @@ longer used in development mode.
   on HOLD, e.g. power MAX/MIN on the same key as +1/-1. A tap then fires on
   release instead of on press. `label` shows as "HOLD: …" on the button.
 
+Optional `input` section (all off by default, prototype):
+`{ "keyboard": true, "joystick": true, "debug": true }` listens to
+physical keyboard input (low-level hook, listen-only; the deck's own keys
+are filtered out) and joystick buttons (Gamepad API). For now `debug` only
+shows the last inputs in the status bar. Nothing is written to disk.
+
 The config is **validated** on load (structure, key names against the
 nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with
 the file path - not only when a key is pressed in the middle of a game.

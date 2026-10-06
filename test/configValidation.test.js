@@ -124,6 +124,13 @@ test("hold: rejected on toggles, bad keys/holdMs/label detected", () => {
   assert.ok(errs({ label: 3 }).some((e) => e.includes("hold.label")));
 });
 
+test("input section: booleans only", () => {
+  const cfg = (input) => ({ ...wrap([widget()]), input });
+  assert.deepStrictEqual(validateConfig(cfg({ keyboard: true, joystick: false, debug: true }), Key).errors, []);
+  assert.ok(validateConfig(cfg({ keyboard: "yes" }), Key).errors.some((e) => e.includes("input.keyboard")));
+  assert.ok(validateConfig(cfg([]), Key).errors.some((e) => e.includes('"input" must be an object')));
+});
+
 test("panel rows/columns must be whole numbers >= 1", () => {
   const panel = (over) => ({ pages: [{ id: "p", title: "P", panels: [{ id: "pl", widgets: [widget()], ...over }] }] });
   assert.deepStrictEqual(validateConfig(panel({ rows: 3 }), Key).errors, []);

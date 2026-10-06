@@ -131,6 +131,42 @@ with sync_playwright() as p:
     assert not errors, f"JS errors: {errors}"
     print("✓ happy path ok (panels, toggle, navigation, quit button)")
 
+    # --- Input debug line (Phase B): keyboard hook events via the bridge,
+    # joystick buttons via a mocked Gamepad API ---
+    page3 = browser.new_page(viewport={"width": 2560, "height": 720})
+    cfg3 = dict(config, input={"keyboard": True, "joystick": True, "debug": True})
+    page3.add_init_script(f"""
+      window.__inputListeners = [];
+      window.__pads = [null, null, null, null];
+      navigator.getGamepads = () => window.__pads;
+      window.scDeck = {{
+        getConfig: async () => ({json.dumps({"ok": True, "path": "/mock", "config": cfg3, "warnings": []})}),
+        sendHotkey: async () => ({{ ok: true }}),
+        quitApp: async () => {{}},
+        onInputEvent: (cb) => {{ window.__inputListeners.push(cb); return () => {{}}; }}
+      }};
+      window.__input = (e) => window.__inputListeners.forEach(cb => cb(e));
+      window.__pad = (pressed) => {{ window.__pads[1] = {{ index: 1,
+        id: "VKBsim Gladiator EVO  R  (Vendor: 231d Product: 0200)",
+        buttons: pressed.map(p => ({{ pressed: p }})) }}; }};
+    """)
+    page3.goto("http://127.0.0.1:8123/")
+    page3.wait_for_timeout(1200)
+    dbg = page3.locator("[data-input-debug]")
+    assert "JS: NONE" in dbg.inner_text(), dbg.inner_text()
+    page3.evaluate("window.__input({type:'input-status', source:'keyboard', state:'running'})")
+    page3.evaluate("window.__input({type:'input', source:'keyboard', key:'F5', down:true, injected:false})")
+    page3.evaluate("window.__pad(Array.from({length: 16}, (_, i) => i === 12))")
+    page3.wait_for_timeout(200)
+    text = dbg.inner_text()
+    assert "KB: RUNNING" in text, text
+    assert "1=VKBsim Gladiator EVO R [16]" in text, text  # inner_text collapses spaces
+    assert "JS1 VKBsim Gladiator EVO R B13↓" in text, text  # 1-based like SC's js_button13
+    assert "KB F5↓" in text, text
+    # without "debug" the line stays hidden (main page above)
+    assert page.locator("[data-input-debug]").count() == 0, "debug line must be opt-in"
+    print("✓ input debug ok (hook status, key + joystick button events, opt-in)")
+
     # --- Error case: broken config ---
     page2 = browser.new_page(viewport={"width": 2560, "height": 720})
     mock(page2, {"ok": False, "path": "C:/Users/x/AppData/sc-deck/config.json",

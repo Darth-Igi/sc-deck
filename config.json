@@ -5,6 +5,11 @@
     "pollMs": 750,
     "playerName": "Admiral-Chaos"
   },
+  "input": {
+    "keyboard": true,
+    "joystick": true,
+    "debug": true
+  },
   "pages": [
     {
       "id": "ship",

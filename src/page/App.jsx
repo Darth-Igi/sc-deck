@@ -5,6 +5,7 @@ import { useShipTheme } from "../themes/ShipThemeProvider";
 import Panel from "./../component/Panel";
 import PageNav from "./../component/PageNav";
 import StatusBar from "./../component/StatusBar";
+import { startJoystickPolling } from "../joystick";
 
 // Columns a panel occupies: column-flow panels ("rows") get one column per
 // `rows` widgets, grid panels their "columns" (default 3)
@@ -23,6 +24,9 @@ export default function App() {
   const hud = ship.colors;
 
   const handleGameEvent = useDeckStore((s) => s.handleGameEvent);
+  const handleInputEvent = useDeckStore((s) => s.handleInputEvent);
+  const setJoystickDevices = useDeckStore((s) => s.setJoystickDevices);
+  const joystickEnabled = useDeckStore((s) => Boolean(s.inputConfig.joystick));
 
   useEffect(() => {
     init();
@@ -44,6 +48,26 @@ export default function App() {
       return window.scDeck.onGameEvent((event) => handleGameEvent(event));
     }
   }, [handleGameEvent]);
+
+  useEffect(() => {
+    // Physical keyboard (main process hook, config.input.keyboard)
+    if (window.scDeck.onInputEvent) {
+      return window.scDeck.onInputEvent((event) => handleInputEvent(event));
+    }
+  }, [handleInputEvent]);
+
+  useEffect(() => {
+    // Joystick buttons (Gamepad API, config.input.joystick)
+    if (!joystickEnabled) return;
+    const stop = startJoystickPolling(
+      (event) => handleInputEvent({ type: "input", ...event }),
+      setJoystickDevices,
+    );
+    return () => {
+      stop();
+      setJoystickDevices([]);
+    };
+  }, [joystickEnabled, handleInputEvent, setJoystickDevices]);
 
   const centered = {
     height: "100vh",

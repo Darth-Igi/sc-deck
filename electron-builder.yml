@@ -21,6 +21,8 @@ files:
   - configValidation.js
   - gamelog.js
   - scancodeSender.js
+  - inputHook.js
+  - inputHookWorker.js
   # Default config, copied to userData on first launch (see main.js)
   - config.json
   # Renderer bundle produced by "vite build"

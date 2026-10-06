@@ -72,6 +72,20 @@ function validateConfig(config, keyEnum) {
     }
   }
 
+  // Optional physical input listening (keyboard hook / joysticks)
+  if (config.input !== undefined) {
+    const inp = config.input;
+    if (typeof inp !== "object" || inp === null || Array.isArray(inp)) {
+      errors.push('"input" must be an object.');
+    } else {
+      for (const k of ["keyboard", "joystick", "debug"]) {
+        if (inp[k] !== undefined && typeof inp[k] !== "boolean") {
+          errors.push(`"input.${k}" must be true or false.`);
+        }
+      }
+    }
+  }
+
   const seenIds = new Map(); // id -> location where it was first used
 
   config.pages.forEach((page, pi) => {
