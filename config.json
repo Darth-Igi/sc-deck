@@ -309,6 +309,139 @@
           ]
         }
       ]
+    },
+    {
+      "id": "power",
+      "title": "POWER",
+      "panels": [
+        {
+          "id": "power-mgmt",
+          "title": "POWER MANAGEMENT",
+          "rows": 3,
+          "widgets": [
+            {
+              "type": "button",
+              "id": "pwr-wpn-up",
+              "label": "+1",
+              "keys": [
+                "F5"
+              ],
+              "hold": {
+                "label": "MAX"
+              }
+            },
+            {
+              "type": "button",
+              "id": "pwr-wpn-down",
+              "label": "-1",
+              "keys": [
+                "LeftAlt",
+                "F5"
+              ],
+              "hold": {
+                "label": "MIN"
+              }
+            },
+            {
+              "type": "toggle",
+              "id": "pwr-wpn",
+              "label": "WPN",
+              "keys": [
+                "P"
+              ],
+              "initial": true
+            },
+            {
+              "type": "button",
+              "id": "pwr-thr-up",
+              "label": "+1",
+              "keys": [
+                "F6"
+              ],
+              "hold": {
+                "label": "MAX"
+              }
+            },
+            {
+              "type": "button",
+              "id": "pwr-thr-down",
+              "label": "-1",
+              "keys": [
+                "LeftAlt",
+                "F6"
+              ],
+              "hold": {
+                "label": "MIN"
+              }
+            },
+            {
+              "type": "toggle",
+              "id": "pwr-thr",
+              "label": "THR",
+              "keys": [
+                "I"
+              ],
+              "initial": true
+            },
+            {
+              "type": "button",
+              "id": "pwr-shld-up",
+              "label": "+1",
+              "keys": [
+                "F7"
+              ],
+              "hold": {
+                "label": "MAX"
+              }
+            },
+            {
+              "type": "button",
+              "id": "pwr-shld-down",
+              "label": "-1",
+              "keys": [
+                "LeftAlt",
+                "F7"
+              ],
+              "hold": {
+                "label": "MIN"
+              }
+            },
+            {
+              "type": "toggle",
+              "id": "pwr-shld",
+              "label": "SHLD",
+              "keys": [
+                "O"
+              ],
+              "initial": true
+            }
+          ]
+        },
+        {
+          "id": "power-system",
+          "title": "SYSTEM",
+          "columns": 1,
+          "widgets": [
+            {
+              "type": "toggle",
+              "id": "pwr-all",
+              "label": "POWER",
+              "keys": [
+                "U"
+              ],
+              "initial": true
+            },
+            {
+              "type": "button",
+              "id": "pwr-reset",
+              "label": "RESET",
+              "keys": [
+                "F8"
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

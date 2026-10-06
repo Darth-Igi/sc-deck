@@ -26,6 +26,7 @@ const {
   createScancodeSender,
   SCANCODE_KEY_NAMES,
   canSendViaScancodes,
+  MAX_HOLD_MS,
 } = require("./scancodeSender");
 
 let scancodeSender = null;
@@ -303,7 +304,7 @@ ipcMain.handle("quit-app", () => app.quit());
 // briefly register as Ctrl+Alt+T).
 let hotkeyQueue = Promise.resolve();
 
-async function doSendKeys(keys) {
+async function doSendKeys(keys, holdMs) {
   if (!scancodeSender) {
     throw new Error(scancodeLoadError || "Key dispatch not available");
   }
@@ -312,10 +313,12 @@ async function doSendKeys(keys) {
     // raw IPC input (a compromised renderer could send arbitrary strings).
     throw new Error(`Unknown key(s): ${keys.join(", ")}`);
   }
-  await scancodeSender.sendCombo(keys);
+  await scancodeSender.sendCombo(keys, { holdMs });
 }
 
-ipcMain.handle("send-hotkey", (_event, keys) => {
+// holdMs (optional): chord held that long instead of the default ~30 ms -
+// for game actions that trigger on HOLD (power MAX/MIN)
+ipcMain.handle("send-hotkey", (_event, keys, holdMs) => {
   // Validate IPC input before it reaches the queue
   if (
     !Array.isArray(keys) ||
@@ -325,10 +328,16 @@ ipcMain.handle("send-hotkey", (_event, keys) => {
   ) {
     return { ok: false, error: "Invalid key list" };
   }
+  if (
+    holdMs !== undefined &&
+    !(Number.isInteger(holdMs) && holdMs >= 0 && holdMs <= MAX_HOLD_MS)
+  ) {
+    return { ok: false, error: "Invalid hold duration" };
+  }
 
   const job = hotkeyQueue.then(async () => {
     try {
-      await doSendKeys(keys);
+      await doSendKeys(keys, holdMs);
       return { ok: true };
     } catch (err) {
       console.error("Failed to send hotkey:", err);

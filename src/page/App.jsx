@@ -6,6 +6,11 @@ import Panel from "./../component/Panel";
 import PageNav from "./../component/PageNav";
 import StatusBar from "./../component/StatusBar";
 
+// Columns a panel occupies: column-flow panels ("rows") get one column per
+// `rows` widgets, grid panels their "columns" (default 3)
+const panelColumns = (p) =>
+  p.rows ? Math.ceil(p.widgets.length / p.rows) : p.columns || 3;
+
 export default function App() {
   const pages = useDeckStore((s) => s.pages);
   const currentPageIndex = useDeckStore((s) => s.currentPageIndex);
@@ -128,7 +133,7 @@ export default function App() {
           flex: 1,
           display: "grid",
           gridTemplateColumns: page.panels
-            .map((p) => `${Math.max(p.columns || 3, 1)}fr`)
+            .map((p) => `${Math.max(panelColumns(p), 1)}fr`)
             .join(" "),
           gap: 2,
           minHeight: 0,

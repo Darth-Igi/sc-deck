@@ -1,8 +1,8 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.13.1 (Hersteller-Logos als Wasserzeichen in Theme-Farbe, zentriert
-in jedem Panel; davor
-v2.12: Per-Schiff-Toggle-Zustände überleben einen App-Neustart, Klassennamen
+Stand: v2.14 (Power-Seite: je System +1/−1/On-Off übereinander, Halten =
+MAX/MIN per langem Tastendruck; davor v2.13.1: Hersteller-Logos als
+Wasserzeichen in Theme-Farbe, zentriert in jedem Panel; v2.12: Per-Schiff-Toggle-Zustände überleben einen App-Neustart, Klassennamen
 aller Theme-Hersteller mit echter Game.log belegt; v2.11:
 Ship-Themes für Aegis, Anvil, Crusader, Drake, Kruger, Origin 400i/M80, RSI
 Aurora/Constellation; v2.10: Schiffserkennung über den Schiffs-Chatkanal +
@@ -39,7 +39,7 @@ Default-Look.
   Hintergrund in Abschnitt 5.
 - Struktur: **`config.json`** → optionaler Abschnitt `gamelog` +
   `pages[]` → `panels[]` → `widgets[]`. Zwei Widget-Typen: `button`
-  (Momentan-Taste) und `toggle` (merkt sich lokalen On/Off-Zustand,
+  (Momentan-Taste, optional mit `hold` für Tap/Halten, v2.14) und `toggle` (merkt sich lokalen On/Off-Zustand,
   rein optisch/vermutet – das Spiel meldet nichts zurück).
   **Key-Namen im nut-js-Schema** (`LeftControl`, `RightAlt`, `F5`, `Num0`,
   `NumPad0` …) – bewusst beibehalten, damit bestehende Configs beim
@@ -101,14 +101,17 @@ sc-deck/
 │   └── component/
 │       ├── PageNav.jsx    ‹ Titel › Leiste, Reset-Button ⟲ (Long-Press),
 │       │                  Quit-Button ⏻ (Long-Press)
-│       ├── Panel.jsx      Panel; Titel "notch" (im Rahmen) oder "header"
-│       ├── ButtonWidget.jsx
+│       ├── Panel.jsx      Panel; Titel "notch" (im Rahmen) oder "header";
+│       │                  Grid zeilenweise (`columns`) oder spaltenweise
+│       │                  (`rows`, v2.14)
+│       ├── ButtonWidget.jsx  pointerdown; mit `hold`: Tap-oder-Hold (v2.14)
 │       ├── ToggleWidget.jsx  MUI-Switch; Tap-oder-Hold
 │       ├── DeckButton.jsx    (ungenutzt, Altbestand)
 │       └── StatusBar.jsx  Letzter Fehler + Game.log-Info (SHIP: …) +
 │                          manuelle Korrekturen + Dev-Theme-Wähler
 └── test/
-    ├── configValidation.test.js  16 Unit-Tests (inkl. gamelog, accent)
+    ├── configValidation.test.js  19 Unit-Tests (inkl. gamelog, accent,
+    │                             hold, rows/columns)
     ├── gamelog.test.js           36 Unit-Tests: Parser (Kanal-Pfad mit
     │                             echten Log-Zeilen, Session-Replays,
     │                             Legacy-Zonenpfad), Pipeline, Tailer
@@ -121,11 +124,13 @@ sc-deck/
     │   └── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
     │                             echten Session (Handle → TestPilot), alle
     │                             Theme-Hersteller
-    ├── scancode.test.js          9 Unit-Tests (Mapping, Flags,
-    │                             Sequenz, Namensstabilität, Struct-Layout)
+    ├── scancode.test.js          10 Unit-Tests (Mapping, Flags,
+    │                             Sequenz + Timing, Namensstabilität,
+    │                             Struct-Layout)
     ├── render.test.py            Playwright headless: Rendering, Toggle
     │                             (Tap + Long-Press-Korrektur), Nav,
-    │                             Reset, Quit, Error-Screen
+    │                             Reset, Power-Seite (Spalten, Tap/Hold),
+    │                             Quit, Error-Screen
     ├── hotreload.test.py         Playwright: Hot-Reload behält Seite/Toggle
     ├── gamelog.render.test.py    Game-Events + Theme-Wechsel in der UI,
     │                             Persistenz (Queue, Restore, Cursor, Save)
@@ -222,7 +227,12 @@ Wichtige Eigenschaften:
   – nut-js-Namenskonvention, beibehalten.
 - Timing: Events einzeln mit ~15 ms Abstand, ~30 ms Hold vor dem
   Release (rückwärts) – Spiele samplen Input pro Frame, Modifier muss
-  sicher vor der Haupttaste anliegen.
+  sicher vor der Haupttaste anliegen. Seit v2.14 ist der Hold pro Aufruf
+  überschreibbar (`sendCombo(keys, { holdMs })`, IPC `send-hotkey(keys,
+  holdMs)`, max. `MAX_HOLD_MS` = 5000, in Main validiert) – für
+  SC-Aktionen mit Hold-Aktivierung. Timing als pure Funktion
+  `buildTimedSequence` (getestet). Ein langer Hold blockiert die
+  Hotkey-Queue so lange – gewollt, sonst verschränken sich Combos.
 - Pure Teile (`buildInputSequence`, `canSendViaScancodes`) sind
   Electron-frei und laufen in Unit-Tests auf jeder Plattform; der
   FFI-Teil lädt nur auf win32. Das koffi-Struct-Layout (`INPUT` =
@@ -530,6 +540,15 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
     dabei amber auf (Theme-Rolle `warn`, gleiche Farbsprache wie Reset), Meldung
     `MANUAL: <Label> → ON/OFF` in der StatusBar. Loslassen nach dem Hold
     ist ein No-op; Wegziehen vor dem Loslassen bricht ab.
+- **Buttons mit `hold`** (v2.14, Power-Seite): gleiche Tap-oder-Hold-Logik
+  wie Toggles (`useTapOrHold`, 600 ms). **Tap** feuert beim Loslassen und
+  sendet die Keys normal (~30 ms). **Halten** sendet `hold.keys` (Default:
+  dieselben Keys) **`hold.holdMs` lang gedrückt** (Default 800 ms,
+  `DEFAULT_BUTTON_HOLD_MS` in `store.js`) – so löst SC die Hold-Aktion aus
+  (+1 = F5 tippen, MAX = F5 halten). Rahmen lädt sich dabei amber auf.
+  Buttons **ohne** `hold` feuern unverändert auf pointerdown.
+  **Unbestätigt:** SCs Hold-Schwelle ist nicht dokumentiert; 800 ms sind
+  eine Annahme – im Spiel prüfen, ggf. per `hold.holdMs` anpassen.
 - **Reset-Button ⟲** (Nav-Leiste): Long-Press setzt **alle** Toggles auf
   `initial` zurück, ohne Tastenversand (Rundumschlag-Variante).
 - **Quit-Button ⏻**: Long-Press-gesichert (Touch-Fläche, Handballen).
@@ -560,9 +579,9 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
 ## 10. Testing
 
 ```bash
-npm test        # 97 Unit-Tests: Config-Validierung (16), Game.log-Parser/
+npm test        # 101 Unit-Tests: Config-Validierung (19), Game.log-Parser/
                 # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
-                # Ship-Themes + Logos (15), Scancode (9). Reines Node,
+                # Ship-Themes + Logos (15), Scancode (10). Reines Node,
                 # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -573,7 +592,7 @@ python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.13 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.14 grün (Playwright gegen frischen Build).
 **Windows-Konsole:** Die Suiten geben `✓` aus – ohne
 `PYTHONIOENCODING=utf-8` (bzw. `chcp 65001`) bricht Python mit
 `UnicodeEncodeError` (cp1252) ab, obwohl der Test selbst grün wäre.
@@ -605,7 +624,39 @@ Hold ist kein zweites Toggle).
 3. ~~`vehicleMemory` persistieren~~ → v2.12 (`deck-state.json`, Abschnitt 6a).
    Praxistest: im Schiff Toggles setzen, App beenden/neu starten → Zustand
    und Theme müssen sofort wieder da sein.
-4. Power-Dreieck / Slider-Widget mit gekoppelten Werten.
+4. **Power-Management** – Phase A erledigt (v2.14), Phasen B/C offen.
+   **Entscheidung (2026-10-06):** kein Pip-/Balken-Zustand. Grund: Der
+   Power-Zustand ist nicht auslesbar, und die Pip-Zahl hängt vom verbauten
+   Power Plant ab. Geprüft: Game.log enthält **keine** Schiffskomponenten
+   (`AttachmentReceived`/`EquipItem` nur für Spieler-Ausrüstung, 0 Treffer
+   für `POWR_`/`hardpoint`); erkul/scunpacked/star-citizen.wiki kennen nur
+   Standard-Loadouts. Daher nur zustandslose Aktionen.
+   - **Umgesetzt (Seite POWER, letzte Seite):** Panel POWER MANAGEMENT mit
+     `rows: 3` – je System eine Spalte +1 (F5/F6/F7, Halten = MAX) / −1
+     (LeftAlt+F‹n›, Halten = MIN) / On-Off-Toggle (`v_power_toggle_*`:
+     WPN P, THR I, SHLD O). Panel SYSTEM: Toggle POWER (U,
+     `v_power_toggle`) + Button RESET (F8, `v_engineering_assignment_reset`).
+     Alle Binds = SC-Tastatur-Defaults (Nutzer hat für diese Aktionen nur
+     Joystick-Binds umgelegt, siehe `actionmaps.xml`).
+   - **Nicht umgesetzt:** Quantum, Radar, Cooler, Life Support – dafür gibt
+     es in SC (4.10) keine Keybinds, nur MFD-Bedienung
+     (`v_cooler_throttle_up/down` ist Altbestand, Wirkung unklar). Nutzer
+     soll im Spiel unter Keybindings nachsehen; bei Fund nur Config-Spalten
+     ergänzen.
+   - **Im Spiel zu prüfen:** reicht 800 ms für MAX/MIN; `initial: true` der
+     Power-Toggles (Schiff frisch ausgeparkt = an?); Flight Ready (R)
+     schaltet Power ohne Wissen des Decks.
+   - **Phase B (offen):** Prototyp „Eingaben mitlesen“ – Tastatur per
+     `WH_KEYBOARD_LL` (koffi, Main; eigene Events per `LLKHF_INJECTED`
+     filtern), Joysticks per Chromium-Gamepad-API im Renderer (Risiko:
+     liefert sie ohne Fensterfokus? alle VKB-Buttons?; Fallback Raw Input).
+     Erst nur Debug-Ausgabe in der StatusBar.
+   - **Phase C (offen):** `actionmaps.xml` parsen (`js1`–`js3` ↔ Geräte
+     per Product-GUID, `kb1_`) + Default-Tabelle für Nicht-Umgelegtes →
+     physische Eingaben auf Toggle-Zustände abbilden (Tap/Hold nachbilden:
+     beim Nutzer liegt increase **und** max auf demselben Joystick-Button).
+     Nutzen v. a. für On/Off; +1/−1 bleibt mangels Pip-Zahl relativ.
+   - Offen aus 2026-10-05: Reset-Werte nach F8, Kopplung der Kanäle.
 5. Formular-basierter Editier-Modus in der App (schreibt config.json).
 6. ~~`electron-builder`-Packaging~~ → erledigt (Commit `bef1fff`, war im
    Handover nicht nachgetragen): `npm run dist` / `dist:portable` /
@@ -693,6 +744,13 @@ Hold ist kein zweites Toggle).
 19. **v2.13.1**: Nutzerwunsch: Logos zentriert in jedem Panel statt einmal
     unten rechts. Wasserzeichen von `App.jsx` nach `Panel.jsx` verschoben,
     UI-Test um Zentrierungs-Check erweitert. Alle Suiten grün.
+20. **v2.14**: Power-Management. Recherche: Komponenten/Power-Zustand nicht
+    auslesbar (Game.log, erkul) → zustandslose Buttons. Für Quantum/Radar/
+    Cooler/Life Support keine Keybinds gefunden → vorerst nur WPN/THR/SHD.
+    Neu: `hold` für Buttons (Tap = +1, Halten = MAX/MIN per langem
+    Tastendruck), Panel-Option `rows` (Spalten wie im MFD), Seite POWER.
+    Bestehende Seiten pixelgleich (nur Seitenzähler 1/3 → 1/4).
+    101 Unit-Tests + 3 UI-Suiten grün. Nächstes: Phase B (Eingaben mitlesen).
 
 ## 13. Hinweise für den nächsten Agenten
 

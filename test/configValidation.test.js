@@ -105,4 +105,32 @@ test("prototype members are not valid key names", () => {
   assert.ok(errors.some((e) => e.includes("toString")));
 });
 
+test("hold: valid on buttons (keys/holdMs/label optional)", () => {
+  assert.deepStrictEqual(validateConfig(wrap([widget({ hold: {} })]), Key).errors, []);
+  const full = widget({ hold: { keys: ["LeftAlt", "F5"], holdMs: 800, label: "MIN" } });
+  assert.deepStrictEqual(validateConfig(wrap([full]), Key).errors, []);
+});
+
+test("hold: rejected on toggles, bad keys/holdMs/label detected", () => {
+  const onToggle = widget({ type: "toggle", hold: {} });
+  assert.ok(validateConfig(wrap([onToggle]), Key).errors.some((e) => e.includes("only supported on buttons")));
+  const errs = (hold) => validateConfig(wrap([widget({ hold })]), Key).errors;
+  assert.ok(errs([]).some((e) => e.includes('"hold" must be an object')));
+  assert.ok(errs({ keys: [] }).some((e) => e.includes("hold.keys")));
+  assert.ok(errs({ keys: ["LeftCtrl"] }).some((e) => e.includes("LeftCtrl")));
+  assert.ok(errs({ holdMs: -1 }).some((e) => e.includes("hold.holdMs")));
+  assert.ok(errs({ holdMs: 99999 }).some((e) => e.includes("hold.holdMs")));
+  assert.ok(errs({ holdMs: 1.5 }).some((e) => e.includes("hold.holdMs")));
+  assert.ok(errs({ label: 3 }).some((e) => e.includes("hold.label")));
+});
+
+test("panel rows/columns must be whole numbers >= 1", () => {
+  const panel = (over) => ({ pages: [{ id: "p", title: "P", panels: [{ id: "pl", widgets: [widget()], ...over }] }] });
+  assert.deepStrictEqual(validateConfig(panel({ rows: 3 }), Key).errors, []);
+  assert.deepStrictEqual(validateConfig(panel({ columns: 2 }), Key).errors, []);
+  assert.ok(validateConfig(panel({ rows: 0 }), Key).errors.some((e) => e.includes('"rows"')));
+  assert.ok(validateConfig(panel({ rows: "3" }), Key).errors.some((e) => e.includes('"rows"')));
+  assert.ok(validateConfig(panel({ columns: 1.5 }), Key).errors.some((e) => e.includes('"columns"')));
+});
+
 console.log(`\n${passed} tests passed`);

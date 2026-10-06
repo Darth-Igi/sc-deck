@@ -15,7 +15,7 @@ def mock(page, result):
     page.add_init_script(f"""
       window.scDeck = {{
         getConfig: async () => ({json.dumps(result)}),
-        sendHotkey: async (keys) => {{ window.__lastKeys = keys; return {{ ok: true }}; }},
+        sendHotkey: async (keys, holdMs) => {{ window.__lastKeys = keys; window.__lastHold = holdMs; return {{ ok: true }}; }},
         quitApp: async () => {{ window.__quit = true; }}
       }};
     """)
@@ -85,6 +85,38 @@ with sync_playwright() as p:
     page.locator('[aria-label="Next page"]').dispatch_event("pointerdown")
     page.wait_for_timeout(300)
     assert page.get_by_text("IFCS").count() > 0, "page switching broken"
+
+    # POWER page (last): column layout + buttons with "hold".
+    # Tap = +1 (normal short press, sent on release), hold = MAX (same key,
+    # held down long so SC's hold activation fires).
+    for _ in range(len(config["pages"]) - 2):
+        page.locator('[aria-label="Next page"]').dispatch_event("pointerdown")
+        page.wait_for_timeout(300)
+    assert page.get_by_text("POWER MANAGEMENT").count() > 0, "power page missing"
+    wpn_up = page.get_by_text("HOLD: MAX").first.locator("..")
+    page.evaluate("window.__lastKeys = null")
+    wpn_up.dispatch_event("pointerdown")
+    page.wait_for_timeout(150)
+    assert page.evaluate("window.__lastKeys") is None, "hold button must not fire on pointerdown"
+    wpn_up.dispatch_event("pointerup")
+    page.wait_for_timeout(200)
+    assert page.evaluate("window.__lastKeys") == ["F5"], "tap sends wrong keys"
+    assert page.evaluate("window.__lastHold") is None, "tap must use the default hold"
+    page.evaluate("window.__lastKeys = null")
+    wpn_up.dispatch_event("pointerdown")
+    page.wait_for_timeout(800)  # past the 600ms deck threshold
+    assert page.evaluate("window.__lastKeys") == ["F5"], "hold sends wrong keys"
+    assert page.evaluate("window.__lastHold") == 800, "hold must send the long key hold"
+    page.evaluate("window.__lastKeys = null")
+    wpn_up.dispatch_event("pointerup")  # release after hold = no-op
+    page.wait_for_timeout(200)
+    assert page.evaluate("window.__lastKeys") is None, "release after hold must not tap"
+    # columns: +1 above -1 above the WPN toggle, same x
+    boxes = [page.get_by_text(t).first.bounding_box() for t in ("HOLD: MAX", "HOLD: MIN")]
+    boxes.append(page.locator('label:has-text("WPN")').first.bounding_box())
+    cx = [b["x"] + b["width"] / 2 for b in boxes]
+    assert max(cx) - min(cx) < 2 and boxes[0]["y"] < boxes[1]["y"] < boxes[2]["y"], f"power column layout broken: {boxes}"
+    print("✓ power page ok (column layout, tap = +1, hold = long key hold)")
 
     # Quit is long-press guarded too: short tap must not quit
     quit_btn = page.locator('[aria-label="Quit app"]')

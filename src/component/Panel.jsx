@@ -139,9 +139,27 @@ export default function Panel({ panel }) {
           position: "relative",
           flex: 1,
           display: "grid",
-          gridTemplateColumns: `repeat(${panel.columns || 3}, 1fr)`,
-          gap: 2,
-          alignContent: "start",
+          // "rows": column-wise flow, a new column every `rows` widgets
+          // (power columns: +1 / -1 / on-off stacked per system)
+          ...(panel.rows
+            ? {
+                // rows fill the panel height (big touch targets), narrow
+                // centered columns like the cockpit's power bars
+                gridTemplateRows: `repeat(${panel.rows}, minmax(0, 1fr))`,
+                gridAutoFlow: "column",
+                gridAutoColumns: "minmax(0, 200px)",
+                justifyContent: "center",
+                alignContent: "stretch",
+                columnGap: 6,
+                rowGap: 2,
+                // buttons stretch to the cell, toggles sit centered in it
+                "& > .MuiFormControlLabel-root": { alignSelf: "center" },
+              }
+            : {
+                gridTemplateColumns: `repeat(${panel.columns || 3}, 1fr)`,
+                gap: 2,
+                alignContent: "start",
+              }),
         }}
       >
         {panel.widgets.map((widget) => {

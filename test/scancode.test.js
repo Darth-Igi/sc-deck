@@ -9,6 +9,7 @@ const {
   SCANCODE_KEY_NAMES,
   canSendViaScancodes,
   buildInputSequence,
+  buildTimedSequence,
 } = require("../scancodeSender");
 
 let passed = 0;
@@ -83,6 +84,23 @@ test("buildInputSequence: press in order, release reversed, correct flags", () =
 
 test("buildInputSequence throws on unmapped keys", () => {
   assert.throws(() => buildInputSequence(["Pause"]));
+});
+
+test("timed sequence: chord held holdMs, other gaps keyDelayMs, none at the end", () => {
+  const timing = { keyDelayMs: 15, holdMs: 30 };
+  const seq = buildTimedSequence(["LeftAlt", "F5"], timing);
+  assert.deepStrictEqual(
+    seq.map((e) => [e.name, e.up, e.delayAfter]),
+    [
+      ["LeftAlt", false, 15],
+      ["F5", false, 30], // chord fully down -> hold
+      ["F5", true, 15],
+      ["LeftAlt", true, 0],
+    ]
+  );
+  // long hold (power MAX/MIN) only changes the hold slot
+  const long = buildTimedSequence(["F5"], { keyDelayMs: 15, holdMs: 800 });
+  assert.deepStrictEqual(long.map((e) => e.delayAfter), [800, 0]);
 });
 
 test("SCANCODE_KEY_NAMES mirrors the mapping table", () => {

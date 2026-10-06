@@ -105,6 +105,14 @@ longer used in development mode.
 - `accent` (widget): custom accent color, e.g. `"#ff4d4d"`.
 - `columns` (panel): columns of the widget grid; also determines the
   relative panel width on the page.
+- `rows` (panel): column-wise layout instead - widgets flow top to bottom,
+  a new column every `rows` widgets (power page: +1 / -1 / on-off stacked
+  per system). Rows fill the panel height.
+- `hold` (button): `{ "keys"?, "holdMs"?, "label"? }` - holding the button
+  on the deck (600 ms) sends `hold.keys` (default: the button's keys) held
+  down for `holdMs` (default 800, max 5000) - for game actions that trigger
+  on HOLD, e.g. power MAX/MIN on the same key as +1/-1. A tap then fires on
+  release instead of on press. `label` shows as "HOLD: …" on the button.
 
 The config is **validated** on load (structure, key names against the
 nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with

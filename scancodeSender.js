@@ -123,6 +123,22 @@ function buildInputSequence(keys) {
   return [...press, ...release];
 }
 
+// Upper bound for a held chord (config "hold.holdMs"). Long holds block the
+// hotkey queue, and a renderer must not be able to park a key forever.
+const MAX_HOLD_MS = 5000;
+
+/** Pure: the sequence plus the pause after each event. Modifiers and keys
+ * go down `keyDelayMs` apart, the full chord stays down `holdMs`, releases
+ * are `keyDelayMs` apart again; no pause after the last event. */
+function buildTimedSequence(keys, { keyDelayMs, holdMs }) {
+  const sequence = buildInputSequence(keys);
+  return sequence.map((ev, i) => ({
+    ...ev,
+    delayAfter:
+      i === sequence.length - 1 ? 0 : i === keys.length - 1 ? holdMs : keyDelayMs,
+  }));
+}
+
 // ---- FFI part (win32 only) ----
 
 const KEYEVENTF_EXTENDEDKEY = 0x0001;
@@ -205,16 +221,13 @@ function createScancodeSender(opts = {}) {
 
   /** Presses the combo (in order), holds, releases in reverse order.
    * Events are spaced a few ms apart so games that sample input per frame
-   * reliably see modifiers before the main key. */
-  async function sendCombo(keys) {
-    const sequence = buildInputSequence(keys);
-    const pressCount = keys.length;
-    for (let i = 0; i < sequence.length; i++) {
-      sendOne(sequence[i]);
-      const isLast = i === sequence.length - 1;
-      const chordFullyDown = i === pressCount - 1;
-      if (isLast) continue;
-      await sleep(chordFullyDown ? holdMs : keyDelayMs);
+   * reliably see modifiers before the main key. `opts.holdMs` overrides the
+   * hold for long presses (SC "hold" activations like power MAX/MIN). */
+  async function sendCombo(keys, opts = {}) {
+    const timing = { keyDelayMs, holdMs: opts.holdMs ?? holdMs };
+    for (const ev of buildTimedSequence(keys, timing)) {
+      sendOne(ev);
+      if (ev.delayAfter) await sleep(ev.delayAfter);
     }
   }
 
@@ -226,5 +239,7 @@ module.exports = {
   SCANCODE_KEY_NAMES,
   canSendViaScancodes,
   buildInputSequence,
+  buildTimedSequence,
+  MAX_HOLD_MS,
   createScancodeSender,
 };

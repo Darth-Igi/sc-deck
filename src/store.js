@@ -9,6 +9,10 @@ import {
   snapshotOf,
 } from "./gameEvents";
 
+// Default key hold for a button's "hold" action. SC's hold threshold is not
+// documented; per widget overridable via "hold.holdMs" (config.json).
+export const DEFAULT_BUTTON_HOLD_MS = 800;
+
 let initStarted = false;
 
 export const useDeckStore = create((set, get) => ({
@@ -180,10 +184,11 @@ export const useDeckStore = create((set, get) => ({
   },
 
   // ---- Shared trigger logic: send keys + pressed/error feedback ----
-  _sendKeys: async (widget) => {
+  // `keys`/`holdMs` override the widget's combo (button long press)
+  _sendKeys: async (widget, keys = widget.keys, holdMs) => {
     set({ pressedId: widget.id, errorId: null });
 
-    const result = await window.scDeck.sendHotkey(widget.keys);
+    const result = await window.scDeck.sendHotkey(keys, holdMs);
 
     if (!result.ok) {
       console.error("Hotkey error:", result.error);
@@ -209,6 +214,14 @@ export const useDeckStore = create((set, get) => ({
   // Momentary button: just send the keys
   triggerButton: async (widget) => {
     await get()._sendKeys(widget);
+  },
+
+  // Long press on a button with "hold": the hold combo (default: the same
+  // keys) is held down holdMs long, so game actions bound to HOLD trigger
+  // (power MAX/MIN on the same key as +1/-1)
+  triggerButtonHold: async (widget) => {
+    const { keys = widget.keys, holdMs = DEFAULT_BUTTON_HOLD_MS } = widget.hold;
+    await get()._sendKeys(widget, keys, holdMs);
   },
 
   // Toggle: state only flips on successful dispatch, so the UI and the

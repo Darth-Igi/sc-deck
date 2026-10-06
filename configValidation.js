@@ -1,7 +1,19 @@
 // Validation for config.json - deliberately free of Electron dependencies
 // so it can be tested in isolation. The key enum is injected.
 
+const { MAX_HOLD_MS } = require("./scancodeSender");
+
 const VALID_TYPES = ["button", "toggle"];
+
+const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
+
+/** Unknown key names in a combo (hasOwnProperty, not `in`: `in` would also
+ * accept prototype members like "toString" as valid key names). */
+function unknownKeys(keys, keyEnum) {
+  return keys.filter(
+    (k) => typeof k !== "string" || !Object.prototype.hasOwnProperty.call(keyEnum, k)
+  );
+}
 
 /**
  * Checks config structure, key names, and duplicate IDs.
@@ -76,6 +88,14 @@ function validateConfig(config, keyEnum) {
       const panelRef = `${pageRef} -> panel ${pli + 1} ("${panel?.title ?? panel?.id ?? "?"}")`;
 
       if (!panel?.id) errors.push(`${panelRef}: "id" is missing.`);
+      if (panel?.columns !== undefined && !isPositiveInt(panel.columns)) {
+        errors.push(`${panelRef}: "columns" must be a whole number >= 1.`);
+      }
+      // "rows": widgets flow top-to-bottom, a new column every `rows`
+      // widgets (cockpit power columns: +1 / -1 / on-off per system)
+      if (panel?.rows !== undefined && !isPositiveInt(panel.rows)) {
+        errors.push(`${panelRef}: "rows" must be a whole number >= 1.`);
+      }
       if (!Array.isArray(panel?.widgets) || panel.widgets.length === 0) {
         errors.push(`${panelRef}: "widgets" is missing or empty.`);
         return;
@@ -126,20 +146,44 @@ function validateConfig(config, keyEnum) {
         if (!Array.isArray(w?.keys) || w.keys.length === 0) {
           errors.push(`${wRef}: "keys" is missing or empty.`);
         } else {
-          for (const k of w.keys) {
-            // hasOwnProperty, not `in`: `in` would also accept prototype
-            // members like "toString" as valid key names
-            if (
-              typeof k !== "string" ||
-              !Object.prototype.hasOwnProperty.call(keyEnum, k)
-            ) {
-              errors.push(
-                `${wRef}: unknown key "${k}" - see SCANCODES in scancodeSender.js for valid names (e.g. "LeftControl", "F5", "N").`
-              );
-            }
+          for (const k of unknownKeys(w.keys, keyEnum)) {
+            errors.push(
+              `${wRef}: unknown key "${k}" - see SCANCODES in scancodeSender.js for valid names (e.g. "LeftControl", "F5", "N").`
+            );
           }
           if (w.keys.length > 4) {
             warnings.push(`${wRef}: ${w.keys.length} keys at once - unusual, intended?`);
+          }
+        }
+
+        // "hold" (buttons only): long press on the deck sends hold.keys
+        // (default: the widget's keys) held for hold.holdMs - for game
+        // actions that trigger on HOLD, e.g. power MAX/MIN
+        if (w?.hold !== undefined) {
+          const h = w.hold;
+          if (w.type !== "button") {
+            errors.push(`${wRef}: "hold" is only supported on buttons.`);
+          } else if (typeof h !== "object" || h === null || Array.isArray(h)) {
+            errors.push(`${wRef}: "hold" must be an object ({ "keys", "holdMs", "label" }).`);
+          } else {
+            if (h.keys !== undefined) {
+              if (!Array.isArray(h.keys) || h.keys.length === 0) {
+                errors.push(`${wRef}: "hold.keys" must be a non-empty key list.`);
+              } else {
+                for (const k of unknownKeys(h.keys, keyEnum)) {
+                  errors.push(`${wRef}: unknown key "${k}" in "hold.keys".`);
+                }
+              }
+            }
+            if (
+              h.holdMs !== undefined &&
+              !(Number.isInteger(h.holdMs) && h.holdMs >= 0 && h.holdMs <= MAX_HOLD_MS)
+            ) {
+              errors.push(`${wRef}: "hold.holdMs" must be a whole number 0-${MAX_HOLD_MS}.`);
+            }
+            if (h.label !== undefined && typeof h.label !== "string") {
+              errors.push(`${wRef}: "hold.label" must be a string.`);
+            }
           }
         }
       });
