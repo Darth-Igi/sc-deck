@@ -10,6 +10,9 @@ srv = http.server.ThreadingHTTPServer(("127.0.0.1", 8123), handler)
 threading.Thread(target=srv.serve_forever, daemon=True).start()
 
 config = json.load(open("config.json"))
+# the user's config may have input listening on (testing) - the happy path
+# runs without it; the input tests below set their own
+config.pop("input", None)
 
 def mock(page, result):
     page.add_init_script(f"""
@@ -166,6 +169,83 @@ with sync_playwright() as p:
     # without "debug" the line stays hidden (main page above)
     assert page.locator("[data-input-debug]").count() == 0, "debug line must be opt-in"
     print("✓ input debug ok (hook status, key + joystick button events, opt-in)")
+
+    # --- Phase C: physical inputs -> SC actions -> power toggles ---
+    # Bindings as main sends them (resolved from the real actionmaps.xml in
+    # test/actionmaps.test.js); no Game.log in this mock = inputs always count.
+    js2 = lambda b: {"kind": "js", "product": "3201", "vendor": "231d", "button": b}
+    bindings = {"type": "input-bindings", "path": "/mock/actionmaps.xml", "state": "loaded", "warnings": [],
+                "bindings": {
+                    "v_power_toggle": [{"kind": "kb", "keys": ["U"]}, js2(11)],
+                    "v_power_toggle_weapons": [{"kind": "kb", "keys": ["P"]}, js2(14)],
+                    "v_power_toggle_thrusters": [{"kind": "kb", "keys": ["I"]}, js2(13)],
+                    "v_power_toggle_shields": [{"kind": "kb", "keys": ["O"]}, js2(12)],
+                    "v_flightready": [{"kind": "kb", "keys": ["RightAlt", "R"]}, js2(28)]}}
+    page3.evaluate(f"window.__input({json.dumps(bindings)})")
+    page3.locator('[aria-label="Previous page"]').dispatch_event("pointerdown")  # wraps to POWER
+    page3.wait_for_timeout(300)
+    assert page3.get_by_text("POWER MANAGEMENT").count() > 0, "power page missing"
+    sw = lambda label: page3.locator(f'label:has-text("{label}") input[type=checkbox]').first
+    power = ["POWER", "WPN", "THR", "SHLD"]
+    assert not any(sw(l).is_checked() for l in power), "power must start OFF (parked ship)"
+    assert "MAP: LOADED" in dbg.inner_text(), dbg.inner_text()
+
+    key = lambda k, down=True: page3.evaluate(
+        f"window.__input({{type:'input', source:'keyboard', key:'{k}', down:{str(down).lower()}, injected:false}})")
+    key("P"); key("P", False)
+    page3.wait_for_timeout(150)
+    assert sw("WPN").is_checked(), "physical P must flip WPN"
+    assert "→ v_power_toggle_weapons" in dbg.inner_text(), dbg.inner_text()
+    assert page3.get_by_text("INPUT: WPN → ON").count() > 0, "status bar misses the input change"
+    key("LeftAlt"); key("P"); key("P", False); key("LeftAlt", False)
+    page3.wait_for_timeout(150)
+    assert sw("WPN").is_checked(), "LeftAlt+P is not the WPN bind"
+
+    # flight ready on the left stick (js2_button28): everything on
+    page3.evaluate("""window.__pads[0] = { index: 0, id: "VKBsim Gladiator EVO OT L (Vendor: 231d Product: 3201)",
+      buttons: Array.from({length: 32}, (_, i) => ({ pressed: i === 27 })) }""")
+    page3.wait_for_timeout(150)
+    assert all(sw(l).is_checked() for l in power), "flight ready must switch all power on"
+    # deck tap on POWER (v_power_toggle): only the master switch flips
+    page3.locator('label:has-text("POWER")').first.dispatch_event("pointerdown")
+    page3.locator('label:has-text("POWER")').first.dispatch_event("pointerup")
+    page3.wait_for_timeout(200)
+    assert not sw("POWER").is_checked() and all(sw(l).is_checked() for l in power[1:]), \
+        "master power must leave the subsystems alone"
+    print("✓ input actions ok (keyboard + joystick binds, exact modifiers, flight ready, start OFF)")
+
+    # With Game.log tracking: inputs only count while in a ship (P on foot
+    # must not flip WPN)
+    page4 = browser.new_page(viewport={"width": 2560, "height": 720})
+    page4.add_init_script(f"""
+      window.__in = []; window.__game = [];
+      window.scDeck = {{
+        getConfig: async () => ({json.dumps({"ok": True, "path": "/mock", "config": cfg3, "warnings": []})}),
+        getInputBindings: async () => ({json.dumps(bindings)}),
+        sendHotkey: async () => ({{ ok: true }}),
+        quitApp: async () => {{}},
+        onInputEvent: (cb) => {{ window.__in.push(cb); return () => {{}}; }},
+        onGameEvent: (cb) => {{ window.__game.push(cb); return () => {{}}; }}
+      }};
+      window.__input = (e) => window.__in.forEach(cb => cb(e));
+      window.__fire = (e) => window.__game.forEach(cb => cb(e));
+    """)
+    page4.goto("http://127.0.0.1:8123/")
+    page4.wait_for_timeout(1200)
+    page4.locator('[aria-label="Previous page"]').dispatch_event("pointerdown")
+    page4.wait_for_timeout(300)
+    wpn4 = page4.locator('label:has-text("WPN") input[type=checkbox]').first
+    press_p = "window.__input({type:'input', source:'keyboard', key:'P', down:true}); window.__input({type:'input', source:'keyboard', key:'P', down:false})"
+    page4.evaluate("window.__fire({type:'gamelog-status', state:'watching'})")
+    page4.evaluate(press_p)
+    page4.wait_for_timeout(150)
+    assert not wpn4.is_checked(), "on foot (Game.log active, no ship) P must not flip WPN"
+    assert "MAP: LOADED" in page4.locator("[data-input-debug]").inner_text(), "bindings via getInputBindings"
+    page4.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'AEGS_Gladius:me', vehicleClass:'AEGS_Gladius'})")
+    page4.evaluate(press_p)
+    page4.wait_for_timeout(150)
+    assert wpn4.is_checked(), "in a ship P must flip WPN"
+    print("✓ input actions only count in a ship when Game.log is tracked")
 
     # --- Error case: broken config ---
     page2 = browser.new_page(viewport={"width": 2560, "height": 720})

@@ -14,6 +14,12 @@ const {
   DEFAULT_LOG_PATH,
 } = require("./gamelog");
 const { createKeyboardHook } = require("./inputHook");
+const {
+  parseActionMaps,
+  resolveBindings,
+  actionmapsPathFor,
+  actionsOfConfig,
+} = require("./actionmaps");
 
 // Key dispatch: SendInput with KEYEVENTF_SCANCODE (see scancodeSender.js).
 // Replaces the former nut.js path entirely - nut.js sent virtual keys
@@ -148,6 +154,7 @@ function createWindow() {
   // so replaying is harmless).
   mainWindow.webContents.on("did-finish-load", () => {
     restartGameLog();
+    updateInputBindings();
     // the hook may have started before the page could listen
     sendInputEvent({ type: "input-status", source: "keyboard", state: keyboardHookState });
   });
@@ -168,6 +175,7 @@ app.whenReady().then(() => {
   // immediately (fs.watch may fire multiple times per save -> debounce).
   watchConfig();
   updateKeyboardHook();
+  updateInputBindings();
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -197,6 +205,7 @@ function watchConfig() {
         // gamelog settings (enabled/path/patterns) may have changed too
         restartGameLog();
         updateKeyboardHook();
+        updateInputBindings();
       }, 150);
     });
   } catch (err) {
@@ -291,12 +300,62 @@ function updateKeyboardHook() {
   }
 }
 
+// ---- SC bindings (actionmaps.xml) for the actions the config tracks ----
+// The game rewrites actionmaps.xml when keybindings change (menu, exit), so
+// the file is polled: fs.watchFile also copes with a file that does not
+// exist yet. Missing file = SC keyboard defaults only (actionmaps.js).
+let inputBindings = null;  // last payload, for get-input-bindings
+let watchedActionmaps = null;
+
+function loadInputBindings(file, actions) {
+  let parsed = null;
+  let state = "default";
+  const warnings = [];
+  try {
+    parsed = parseActionMaps(fs.readFileSync(file, "utf-8"));
+    state = "loaded";
+  } catch (err) {
+    if (err.code !== "ENOENT") warnings.push(`actionmaps.xml not readable: ${err.message}`);
+    state = err.code === "ENOENT" ? "missing" : "failed";
+  }
+  const resolved = resolveBindings(parsed, actions);
+  return {
+    type: "input-bindings",
+    path: file,
+    state,
+    bindings: resolved.bindings,
+    warnings: [...warnings, ...resolved.warnings],
+  };
+}
+
+function updateInputBindings() {
+  const result = loadConfigSafe();
+  const input = result.ok ? result.config.input : null;
+  const tracking = Boolean(input && (input.keyboard || input.joystick));
+  const gamelogPath = (result.ok && result.config.gamelog?.path) || DEFAULT_LOG_PATH;
+  const file = tracking ? input.actionmaps || actionmapsPathFor(gamelogPath) : null;
+
+  if (watchedActionmaps !== file) {
+    if (watchedActionmaps) fs.unwatchFile(watchedActionmaps);
+    watchedActionmaps = file;
+    if (file) fs.watchFile(file, { interval: 2000 }, () => updateInputBindings());
+  }
+  inputBindings = file
+    ? loadInputBindings(file, actionsOfConfig(result.config))
+    : { type: "input-bindings", path: null, state: "off", bindings: {}, warnings: [] };
+  for (const w of inputBindings.warnings) console.warn("[input]", w);
+  sendInputEvent(inputBindings);
+}
+
+ipcMain.handle("get-input-bindings", () => inputBindings);
+
 app.on("will-quit", () => {
   globalShortcut.unregisterAll();
   clearTimeout(watchDebounce); // pending debounce must not fire into teardown
   if (configWatcher) configWatcher.close();
   if (gamelogTailer) gamelogTailer.stop();
   if (keyboardHook) keyboardHook.stop();
+  if (watchedActionmaps) fs.unwatchFile(watchedActionmaps);
 });
 
 app.on("window-all-closed", () => {

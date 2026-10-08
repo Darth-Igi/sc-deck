@@ -35,15 +35,16 @@ function DevThemePicker() {
   );
 }
 
-// Phase B debug line (config.input.debug): hook/device status + the last
-// physical inputs, to verify on the target machine that keys and joystick
-// buttons arrive while the game has focus.
+// Debug line (config.input.debug): hook/device/bindings status + the last
+// physical inputs with the SC action they matched, to verify on the target
+// machine that keys and joystick buttons arrive and map correctly.
 function describeInput(ev) {
   const arrow = ev.down ? "↓" : "↑";
+  const action = ev.actions?.length ? ` → ${ev.actions.join("+")}` : "";
   if (ev.source === "keyboard") {
-    return `KB ${ev.key}${arrow}${ev.injected ? " (INJ)" : ""}`;
+    return `KB ${ev.key}${arrow}${ev.injected ? " (INJ)" : ""}${action}`;
   }
-  return `JS${ev.slot} ${ev.name} B${ev.button}${arrow}`;
+  return `JS${ev.slot} ${ev.name} B${ev.button}${arrow}${action}`;
 }
 
 function InputDebug() {
@@ -51,6 +52,7 @@ function InputDebug() {
   const hookState = useDeckStore((s) => s.keyboardHookState);
   const devices = useDeckStore((s) => s.joystickDevices);
   const lastInputs = useDeckStore((s) => s.lastInputs);
+  const bindings = useDeckStore((s) => s.inputBindings);
   const hud = useShipTheme().colors;
   const parts = [];
   if (cfg.keyboard) parts.push(`KB: ${(hookState ?? "starting").toUpperCase()}`);
@@ -61,6 +63,8 @@ function InputDebug() {
         : "JS: NONE (PRESS A BUTTON)"
     );
   }
+  // "loaded" = actionmaps.xml read, "missing" = SC keyboard defaults only
+  if (bindings) parts.push(`MAP: ${bindings.state.toUpperCase()}`);
   parts.push(lastInputs.length ? lastInputs.map(describeInput).join(" · ") : "NO INPUT YET");
   return (
     <Typography

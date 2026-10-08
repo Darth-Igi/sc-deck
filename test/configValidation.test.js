@@ -140,4 +140,28 @@ test("panel rows/columns must be whole numbers >= 1", () => {
   assert.ok(validateConfig(panel({ columns: 1.5 }), Key).errors.some((e) => e.includes('"columns"')));
 });
 
+test("widget action: SC action name", () => {
+  assert.deepStrictEqual(validateConfig(wrap([widget({ action: "v_power_toggle" })]), Key).errors, []);
+  assert.ok(validateConfig(wrap([widget({ action: "v power" })]), Key).errors.some((e) => e.includes('"action"')));
+  assert.ok(validateConfig(wrap([widget({ action: 3 })]), Key).errors.some((e) => e.includes('"action"')));
+});
+
+test("effects: action -> existing toggle ids with booleans", () => {
+  const cfg = (effects) => ({ ...wrap([widget({ type: "toggle", id: "t1" }), widget({ id: "b1" })]), effects });
+  assert.deepStrictEqual(validateConfig(cfg({ v_flightready: { t1: true } }), Key).errors, []);
+  const errs = (effects) => validateConfig(cfg(effects), Key).errors;
+  assert.ok(errs({ v_flightready: { nope: true } }).some((e) => e.includes('"nope" is not a toggle id')));
+  assert.ok(errs({ v_flightready: { b1: true } }).some((e) => e.includes('"b1" is not a toggle id')), "buttons have no state");
+  assert.ok(errs({ v_flightready: { t1: "on" } }).some((e) => e.includes("true or false")));
+  assert.ok(errs({ "bad name": {} }).length > 0);
+  assert.ok(errs([]).some((e) => e.includes('"effects"')));
+});
+
+test("input.actionmaps: path string or null", () => {
+  const cfg = (actionmaps) => ({ ...wrap([widget()]), input: { keyboard: true, actionmaps } });
+  assert.deepStrictEqual(validateConfig(cfg("C:\\x\\actionmaps.xml"), Key).errors, []);
+  assert.deepStrictEqual(validateConfig(cfg(null), Key).errors, []);
+  assert.ok(validateConfig(cfg(5), Key).errors.some((e) => e.includes('"input.actionmaps"')));
+});
+
 console.log(`\n${passed} tests passed`);

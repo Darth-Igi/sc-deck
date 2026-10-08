@@ -8,6 +8,7 @@ import {
   restoreSnapshot,
   snapshotOf,
 } from "./gameEvents";
+import { applyActions, createActionMatcher, describeChanges } from "./inputActions";
 
 // Default key hold for a button's "hold" action. SC's hold threshold is not
 // documented; per widget overridable via "hold.holdMs" (config.json).
@@ -17,6 +18,9 @@ export const DEFAULT_BUTTON_HOLD_MS = 800;
 const INPUT_HISTORY = 4;
 
 let initStarted = false;
+
+// Physical input -> SC actions; rebuilt whenever new bindings arrive
+let matchActions = createActionMatcher({});
 
 export const useDeckStore = create((set, get) => ({
   // ---- Configuration (from config.json via the main process) ----
@@ -51,22 +55,42 @@ export const useDeckStore = create((set, get) => ({
   eventQueue: [],
   pendingSnapshot: null,
 
-  // ---- Physical input (Phase B prototype: debug display only) ----
-  inputConfig: {},           // config.input: { keyboard, joystick, debug }
+  // ---- Physical input (see src/inputActions.js) ----
+  inputConfig: {},           // config.input: { keyboard, joystick, debug, actionmaps }
+  effects: {},               // config.effects: { [action]: { [toggleId]: boolean } }
+  inputBindings: null,       // { path, state, bindings, warnings } from actionmaps.js
   keyboardHookState: null,   // "running" | "failed" | "stopped" | "off"
   joystickDevices: [],       // [{ slot, name, vendor, product, buttons }]
   lastInputs: [],            // newest first, max INPUT_HISTORY entries
 
   // Key transitions from the main process hook, button transitions from
-  // the joystick poller. For now only recorded for the status bar.
+  // the joystick poller. A press bound to an SC action the deck tracks
+  // updates the toggles - only while in a ship (Game.log), otherwise e.g.
+  // P on foot would flip WPN. Without Game.log tracking there is no way to
+  // tell, so inputs always count.
   handleInputEvent: (event) => {
     if (event.type === "input-status") {
       set({ keyboardHookState: event.state });
       return;
     }
+    if (event.type === "input-bindings") {
+      matchActions = createActionMatcher(event.bindings);
+      set({ inputBindings: event });
+      return;
+    }
+    const actions = matchActions(event);
     set((state) => ({
-      lastInputs: [{ ...event, time: Date.now() }, ...state.lastInputs].slice(0, INPUT_HISTORY),
+      lastInputs: [{ ...event, actions, time: Date.now() }, ...state.lastInputs].slice(0, INPUT_HISTORY),
     }));
+    const { gamelogState, currentVehicleId, toggleStates, pages, effects } = get();
+    if (!actions.length || (gamelogState && !currentVehicleId)) return;
+    const result = applyActions(toggleStates, actions, pages, effects);
+    if (result) {
+      set({
+        toggleStates: result.toggleStates,
+        gameStatus: { message: describeChanges("INPUT", result.changes), time: new Date().toLocaleTimeString() },
+      });
+    }
   },
   setJoystickDevices: (devices) => set({ joystickDevices: devices }),
 
@@ -128,6 +152,13 @@ export const useDeckStore = create((set, get) => ({
     } catch (err) {
       console.error("Failed to load deck state:", err);
     }
+    try {
+      // bindings may have been pushed before the page listened
+      const bindings = await window.scDeck.getInputBindings?.();
+      if (bindings) get().handleInputEvent(bindings);
+    } catch (err) {
+      console.error("Failed to load input bindings:", err);
+    }
     const queued = get().eventQueue;
     set({ ready: true, eventQueue: [], pendingSnapshot: snapshot || null });
     for (const event of queued) get().handleGameEvent(event);
@@ -177,6 +208,7 @@ export const useDeckStore = create((set, get) => ({
     set({
       pages: result.config.pages,
       inputConfig: result.config.input ?? {},
+      effects: result.config.effects ?? {},
       toggleStates,
       loaded: true,
       configError: null,
@@ -234,9 +266,18 @@ export const useDeckStore = create((set, get) => ({
     return result.ok;
   },
 
+  // Deck tap of a widget with "action": the game runs that action, so its
+  // effects (and other toggles bound to it) apply like a physical press
+  _applyWidgetAction: (widget) => {
+    const { toggleStates, pages, effects } = get();
+    const result = applyActions(toggleStates, [widget.action], pages, effects);
+    if (result) set({ toggleStates: result.toggleStates });
+  },
+
   // Momentary button: just send the keys
   triggerButton: async (widget) => {
-    await get()._sendKeys(widget);
+    const ok = await get()._sendKeys(widget);
+    if (ok && widget.action) get()._applyWidgetAction(widget);
   },
 
   // Long press on a button with "hold": the hold combo (default: the same
@@ -244,6 +285,7 @@ export const useDeckStore = create((set, get) => ({
   // (power MAX/MIN on the same key as +1/-1)
   triggerButtonHold: async (widget) => {
     const { keys = widget.keys, holdMs = DEFAULT_BUTTON_HOLD_MS } = widget.hold;
+    // no _applyWidgetAction: holding triggers a DIFFERENT SC action (MAX)
     await get()._sendKeys(widget, keys, holdMs);
   },
 
@@ -251,7 +293,9 @@ export const useDeckStore = create((set, get) => ({
   // (assumed) game state don't drift apart when key dispatch fails.
   triggerToggle: async (widget) => {
     const ok = await get()._sendKeys(widget);
-    if (ok) {
+    if (ok && widget.action) {
+      get()._applyWidgetAction(widget); // flips this toggle too
+    } else if (ok) {
       set((state) => ({
         toggleStates: {
           ...state.toggleStates,

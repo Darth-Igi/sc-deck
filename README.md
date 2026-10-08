@@ -114,11 +114,26 @@ longer used in development mode.
   on HOLD, e.g. power MAX/MIN on the same key as +1/-1. A tap then fires on
   release instead of on press. `label` shows as "HOLD: …" on the button.
 
-Optional `input` section (all off by default, prototype):
-`{ "keyboard": true, "joystick": true, "debug": true }` listens to
-physical keyboard input (low-level hook, listen-only; the deck's own keys
-are filtered out) and joystick buttons (Gamepad API). For now `debug` only
-shows the last inputs in the status bar. Nothing is written to disk.
+- `action` (widget): the Star Citizen action the widget triggers, e.g.
+  `"v_power_toggle_weapons"`. With input listening on, pressing that
+  action's binding on the keyboard or joystick flips the toggle too.
+  Bindings come from SC's `actionmaps.xml`. Keyboard defaults for the power
+  actions and flight ready are built in, because SC only stores changed
+  bindings.
+
+Optional `input` section (all off by default):
+`{ "keyboard": true, "joystick": true, "debug": true, "actionmaps": null }`
+listens to physical keyboard input (low-level hook, listen-only; the deck's
+own keys are filtered out) and joystick buttons (Gamepad API). `actionmaps`
+is the path to SC's `actionmaps.xml`. With `null` or no value, the deck
+looks for it next to Game.log in `LIVE\user\client\0\Profiles\default\`,
+and it reloads the file when it changes. While Game.log tracking is on,
+inputs only count while you are in a ship. `debug` shows the last inputs and
+their matched action in the status bar. Nothing is written to disk.
+
+Optional `effects` section: SC action → toggles it sets to a fixed state,
+applied to a physical press and to a deck tap of a widget with that action:
+`{ "v_flightready": { "pwr-all": true, "pwr-wpn": true } }`.
 
 The config is **validated** on load (structure, key names against the
 nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with

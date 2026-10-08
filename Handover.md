@@ -1,7 +1,9 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.15 (Phase B: physische Tastatur- und Joystick-Eingaben mitlesen,
-vorerst nur Debug-Anzeige; davor v2.14: Power-Seite, je System
+Stand: v2.16 (Phase C: Tastatur- und Joystick-Eingaben schalten die
+Power-Toggles über die SC-Belegungen aus `actionmaps.xml`, Flight Ready
+schaltet alles ein, Power startet aus; v2.15: Phase B, Eingaben mitlesen;
+v2.14: Power-Seite, je System
 +1/−1/On-Off übereinander, Halten = MAX/MIN per langem Tastendruck; v2.13.1: Hersteller-Logos als
 Wasserzeichen in Theme-Farbe, zentriert in jedem Panel; v2.12: Per-Schiff-Toggle-Zustände überleben einen App-Neustart, Klassennamen
 aller Theme-Hersteller mit echter Game.log belegt; v2.11:
@@ -64,6 +66,9 @@ sc-deck/
 │                          (pure Teile getestet) + Worker-Steuerung
 ├── inputHookWorker.js     NEU v2.15: WH_KEYBOARD_LL im Worker-Thread mit
 │                          eigener GetMessage-Schleife (koffi)
+├── actionmaps.js          NEU v2.16: actionmaps.xml parsen, SC-Tastennamen →
+│                          Config-Namen, Tastatur-Defaults, Bindings je
+│                          Aktion (Electron-frei, getestet; Abschnitt 6c)
 ├── gamelog.js             Game.log-Parser + Polling-Tailer + Pipeline
 │                          (Session/Zeile je Event, v2.12; Electron-frei,
 │                          unit-testbar; siehe Abschnitt 6)
@@ -85,6 +90,8 @@ sc-deck/
 │   │                      resetToggles, correctToggle
 │   ├── joystick.js        NEU v2.15: Gamepad-API-Polling, pure
 │   │                      Button-Diff (1-basiert wie SC) + ID-Parser
+│   ├── inputActions.js    NEU v2.16: pure: Eingabe → Aktion (Matcher),
+│   │                      Aktion → Toggles (flip + effects)
 │   ├── gameEvents.js      pure Logik Event → Toggle-Update, Cursor,
 │   │                      Snapshot (snapshotOf/restoreSnapshot)
 │   ├── useLongPress.js    useLongPress (Guard für Quit/Reset) +
@@ -118,8 +125,8 @@ sc-deck/
 │       └── StatusBar.jsx  Letzter Fehler + Game.log-Info (SHIP: …) +
 │                          manuelle Korrekturen + Dev-Theme-Wähler
 └── test/
-    ├── configValidation.test.js  20 Unit-Tests (inkl. gamelog, accent,
-    │                             hold, rows/columns, input)
+    ├── configValidation.test.js  23 Unit-Tests (inkl. gamelog, accent,
+    │                             hold, rows/columns, input, action, effects)
     ├── gamelog.test.js           36 Unit-Tests: Parser (Kanal-Pfad mit
     │                             echten Log-Zeilen, Session-Replays,
     │                             Legacy-Zonenpfad), Pipeline, Tailer
@@ -129,9 +136,16 @@ sc-deck/
     │                             Farbrollen, Slot-Tippfehler-Check, echte
     │                             Session → Theme-Kette, Logo-Auswahl)
     ├── fixtures/
-    │   └── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
-    │                             echten Session (Handle → TestPilot), alle
-    │                             Theme-Hersteller
+    │   ├── session-2026-09-28.log  NEU v2.12: schiffsrelevante Zeilen einer
+    │   │                         echten Session (Handle → TestPilot), alle
+    │   │                         Theme-Hersteller
+    │   └── actionmaps-2026-10.xml  NEU v2.16: echte actionmaps.xml des
+    │                             Nutzers (3 VKB-Geräte, keine Personendaten)
+    ├── actionmaps.test.js        8 Unit-Tests (v2.16): Parser, Geräte-GUID,
+    │                             Defaults/Rebind/Unbind, Tastennamen
+    ├── inputActions.test.mjs     6 Unit-Tests (v2.16): Matcher (exakte
+    │                             Modifier, Joystick per GUID), Flight Ready,
+    │                             Master-Power
     ├── input.test.mjs            9 Unit-Tests (v2.15): Scancode→Name,
     │                             Filter (eigene Tasten, Repeat, Fremd-
     │                             Injection), Gamepad-ID, Button-Diff
@@ -141,7 +155,8 @@ sc-deck/
     ├── render.test.py            Playwright headless: Rendering, Toggle
     │                             (Tap + Long-Press-Korrektur), Nav,
     │                             Reset, Power-Seite (Spalten, Tap/Hold),
-    │                             Input-Debug-Zeile, Quit, Error-Screen
+    │                             Input-Debug-Zeile, Eingaben → Power-
+    │                             Toggles (v2.16), Quit, Error-Screen
     ├── hotreload.test.py         Playwright: Hot-Reload behält Seite/Toggle
     ├── gamelog.render.test.py    Game-Events + Theme-Wechsel in der UI,
     │                             Persistenz (Queue, Restore, Cursor, Save)
@@ -443,12 +458,67 @@ Config (alles opt-in, Default aus):
 - **Verifiziert (Entwicklungsrechner = Zielsystem):** Hook in Electron,
   Filter eigener Tasten (0 Events), Fremd-Injection sichtbar, Repeat
   verworfen, Worker lädt auch aus `app.asar` (dist:dir).
-- **Offen – nur der Nutzer kann es prüfen:** (1) Kommen Tasten an, während
-  **SC im Vordergrund** ist (läuft SC als Admin, muss das Deck es auch –
-  UIPI)? (2) Liefert die Gamepad-API Daten, während das Deck-Fenster
-  **keinen Fokus** hat? (3) Erscheinen alle VKB-Geräte (Chromium: max. 4,
-  erst nach einem Tastendruck am Gerät) mit allen Buttons? Fallback, falls
-  (2)/(3) scheitern: Raw Input (HID) per koffi im Worker.
+- **Im Spiel bestätigt (Nutzer, 2026-10-08):** (1) Tasten kommen an,
+  während SC im Vordergrund ist. (2) Die Gamepad-API liefert Daten, obwohl
+  das Deck-Fenster keinen Fokus hat. (3) Alle VKB-Geräte erscheinen mit
+  ihren Buttons, und die Nummern passen zur SC-Zählung (`js3_button13` =
+  `B13`). Der Raw-Input-Fallback wird damit nicht gebraucht.
+
+## 6c. Eingaben → Toggle-Zustände (NEU v2.16, Phase C)
+
+Tastatur- und Joystick-Eingaben (Abschnitt 6b) werden über die SC-Belegungen
+den Aktionen zugeordnet und führen die Toggles nach – auch wenn der Nutzer
+am Stick statt am Deck schaltet.
+
+Config:
+```json
+{ "type": "toggle", "id": "pwr-wpn", "label": "WPN", "keys": ["P"],
+  "action": "v_power_toggle_weapons", "initial": false }
+"effects": { "v_flightready": { "pwr-all": true, "pwr-wpn": true, "pwr-thr": true, "pwr-shld": true } }
+"input": { "keyboard": true, "joystick": true, "debug": true, "actionmaps": null }
+```
+
+- **`action` am Widget** (Nutzerentscheidung statt Ableitung aus `keys` –
+  funktioniert auch für Joystick-Belegungen): Ein Druck auf eine Belegung
+  der Aktion flippt **alle** Toggles mit dieser Aktion. Ein Deck-Tap auf ein
+  Widget mit `action` wirkt genauso (inkl. `effects`). Ausnahme: Halten
+  eines `hold`-Buttons wendet nichts an, weil SC dabei eine andere Aktion
+  auslöst (MAX statt +1).
+- **`effects`**: Aktion → Toggles auf festen Wert. Flight Ready ist laut
+  Nutzer ein reiner **Einschalter** → setzt POWER/WPN/THR/SHLD auf an.
+- **Power startet aus** (`initial: false`): frisch ausgeparkte Schiffe sind
+  aus (Praxistest 2026-10-08).
+- **Master-Power (U)** schaltet nur POWER um, die Einzelzustände bleiben
+  (laut Nutzer behält SC sie über Aus/Ein: „THR war aus, Rest an“).
+- **Belegungen** (`actionmaps.js`, Main): `actionmaps.xml` enthält nur
+  **geänderte** Belegungen. Tastatur-Defaults stehen deshalb in
+  `DEFAULT_KEYBOARD_BINDINGS` (U/P/I/O, `RightAlt+R`). Ein `kb1_`-Rebind
+  ersetzt den Default, ein leerer (`kb1_ `) entfernt ihn. Joystick nur aus
+  der Datei: `jsN_buttonM` → Gerät über `<options instance="N" Product="…
+  {PPPPVVVV-…}">` → Product/Vendor, gegen die Gamepad-ID gematcht (robust
+  gegen SC-Umnummerierung). Achsen, Hats, Maus und Gamepad werden ignoriert.
+  Eine Aktion kann in mehreren Actionmaps stehen (`v_flightready`) → alle
+  Belegungen zählen.
+- **Pfad**: `input.actionmaps` oder automatisch neben Game.log
+  (`LIVE\user\client\0\Profiles\default\actionmaps.xml`, beim Nutzer
+  vorhanden). `fs.watchFile` (2 s) lädt bei Änderungen neu – SC schreibt die
+  Datei beim Verlassen der Keybindings bzw. Spielende. Fehlt die Datei,
+  gelten nur die Defaults (Debug: `MAP: MISSING`).
+- **Matching** (`inputActions.js`, Renderer): feuert beim **Drücken**.
+  Tastatur-Combos zählen nur mit **genau** ihren Modifiern (LeftAlt+P ≠ P,
+  wie in SC). IPC: Bindings kommen als `input-event` vom Typ
+  `input-bindings` (Push bei Start/Config-/Dateiänderung) plus
+  `getInputBindings()` beim Init, weil der Push vor dem Listener kommen kann.
+- **Nur im Schiff:** Ist Game.log-Tracking aktiv, zählen Eingaben nur mit
+  `currentVehicleId` – sonst würde P zu Fuß WPN flippen. Ohne Game.log
+  zählen sie immer. Status: `INPUT: WPN → ON`; Debug-Zeile hängt `→ <action>`
+  an.
+- **Bekannte Grenzen:** Liegen auf einem Button eine Tap- und eine
+  Hold-Aktion, löst SC die Tap-Aktion erst beim Loslassen aus – für die
+  Toggle-Aktionen beim Nutzer nicht der Fall. +1/−1/RESET bleiben ohne
+  Zustand. Andere Toggles (Licht, Türen …) sind nicht verdrahtet: `action`
+  ergänzen und, falls die Tastatur-Belegung nicht umgelegt ist, den Default
+  in `DEFAULT_KEYBOARD_BINDINGS` nachtragen (+ Test).
 
 ## 7. Ship-Themes (NEU v2.10)
 
@@ -600,8 +670,7 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
   `DEFAULT_BUTTON_HOLD_MS` in `store.js`) – so löst SC die Hold-Aktion aus
   (+1 = F5 tippen, MAX = F5 halten). Rahmen lädt sich dabei amber auf.
   Buttons **ohne** `hold` feuern unverändert auf pointerdown.
-  **Unbestätigt:** SCs Hold-Schwelle ist nicht dokumentiert; 800 ms sind
-  eine Annahme – im Spiel prüfen, ggf. per `hold.holdMs` anpassen.
+  **Im Spiel bestätigt (2026-10-08):** 800 ms Halten löst MAX/MIN aus.
 - **Reset-Button ⟲** (Nav-Leiste): Long-Press setzt **alle** Toggles auf
   `initial` zurück, ohne Tastenversand (Rundumschlag-Variante).
 - **Quit-Button ⏻**: Long-Press-gesichert (Touch-Fläche, Handballen).
@@ -632,9 +701,10 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
 ## 10. Testing
 
 ```bash
-npm test        # 111 Unit-Tests: Config-Validierung (20), Game.log-Parser/
+npm test        # 128 Unit-Tests: Config-Validierung (23), Game.log-Parser/
                 # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
-                # Ship-Themes + Logos (15), Scancode (10), Input (9). Reines Node,
+                # Ship-Themes + Logos (15), Scancode (10), Input (9),
+                # actionmaps (8), Input-Aktionen (6). Reines Node,
                 # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -645,7 +715,9 @@ python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.15 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.16 grün (Playwright gegen frischen Build).
+`render.test.py` entfernt `input` aus der geladenen Nutzer-Config – die ist
+lokal oft zum Testen aktiv und brach sonst den Opt-in-Check.
 **Windows-Konsole:** Die Suiten geben `✓` aus – ohne
 `PYTHONIOENCODING=utf-8` (bzw. `chcp 65001`) bricht Python mit
 `UnicodeEncodeError` (cp1252) ab, obwohl der Test selbst grün wäre.
@@ -693,19 +765,19 @@ Hold ist kein zweites Toggle).
      Joystick-Binds umgelegt, siehe `actionmaps.xml`).
    - **Nicht umgesetzt:** Quantum, Radar, Cooler, Life Support – dafür gibt
      es in SC (4.10) keine Keybinds, nur MFD-Bedienung
-     (`v_cooler_throttle_up/down` ist Altbestand, Wirkung unklar). Nutzer
-     soll im Spiel unter Keybindings nachsehen; bei Fund nur Config-Spalten
-     ergänzen.
-   - **Im Spiel zu prüfen:** reicht 800 ms für MAX/MIN; `initial: true` der
-     Power-Toggles (Schiff frisch ausgeparkt = an?); Flight Ready (R)
-     schaltet Power ohne Wissen des Decks.
-   - **Phase B (v2.15, Prototyp gebaut):** siehe Abschnitt 6b. Wartet auf
-     den Praxistest des Nutzers (Debug-Zeile in der StatusBar).
-   - **Phase C (offen):** `actionmaps.xml` parsen (`js1`–`js3` ↔ Geräte
-     per Product-GUID, `kb1_`) + Default-Tabelle für Nicht-Umgelegtes →
-     physische Eingaben auf Toggle-Zustände abbilden (Tap/Hold nachbilden:
-     beim Nutzer liegt increase **und** max auf demselben Joystick-Button).
-     Nutzen v. a. für On/Off; +1/−1 bleibt mangels Pip-Zahl relativ.
+     (`v_cooler_throttle_up/down` ist Altbestand, Wirkung unklar). Vom
+     Nutzer in den Keybindings nachgesehen (2026-10-08): keine vorhanden.
+   - **Praxistest (2026-10-08):** Halten 800 ms → MAX/MIN funktioniert.
+     Frisch ausgeparkte Schiffe sind **aus** – `initial: true` der
+     Power-Toggles ist also falsch. Er stimmt nur zufällig nach Flight Ready
+     (Default `RightAlt+R`, `v_flightready`), das alles einschaltet.
+     Nutzerwunsch für Phase C: mit Power **aus** starten, Flight Ready
+     erkennen und dann die Toggles auf an setzen.
+   - **Phase B (v2.15):** siehe Abschnitt 6b, im Spiel bestätigt.
+   - **Phase C (v2.16, gebaut):** siehe Abschnitt 6c. **Im Spiel zu
+     prüfen:** Schiff ausparken → alles aus; Stick-Button bzw. P/I/O/U
+     schaltet die Anzeige mit; Flight Ready (`RightAlt+R` / `js2_button28`)
+     → alles an; zu Fuß ändert P nichts.
    - Offen aus 2026-10-05: Reset-Werte nach F8, Kopplung der Kanäle.
 5. Formular-basierter Editier-Modus in der App (schreibt config.json).
 6. ~~`electron-builder`-Packaging~~ → erledigt (Commit `bef1fff`, war im
@@ -807,6 +879,14 @@ Hold ist kein zweites Toggle).
     `dwExtraInfo` markiert. `scripts/build.mjs` führt jetzt auch
     `themes.test.mjs` aus (fehlte). 111 Unit-Tests + 3 UI-Suiten grün,
     Hook auch aus asar geprüft. Nutzer-Config: `input` aktiviert für Test.
+
+22. **v2.16**: Praxistest v2.14/v2.15 bestanden (MAX/MIN per Halten,
+    Tasten + Joystick kommen bei SC im Vordergrund an, Button-Nummern = SC).
+    Erkenntnisse: Schiffe starten aus, Flight Ready = `RightAlt+R` und nur
+    Einschalter, Master-Power behält Einzelzustände. Phase C gebaut:
+    `actionmaps.js`, `src/inputActions.js`, `action`/`effects` in der
+    Config, Power-Toggles `initial: false`. 128 Unit-Tests + 3 UI-Suiten
+    grün, Electron-Smoke-Test mit echter actionmaps.xml ohne Warnungen.
 
 ## 13. Hinweise für den nächsten Agenten
 

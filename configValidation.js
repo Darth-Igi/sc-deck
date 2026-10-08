@@ -7,6 +7,10 @@ const VALID_TYPES = ["button", "toggle"];
 
 const isPositiveInt = (v) => Number.isInteger(v) && v > 0;
 
+// SC action names as in actionmaps.xml ("v_power_toggle_weapons")
+const isActionName = (v) => typeof v === "string" && /^[A-Za-z0-9_]+$/.test(v);
+const isPlainObject = (v) => typeof v === "object" && v !== null && !Array.isArray(v);
+
 /** Unknown key names in a combo (hasOwnProperty, not `in`: `in` would also
  * accept prototype members like "toString" as valid key names). */
 function unknownKeys(keys, keyEnum) {
@@ -83,10 +87,15 @@ function validateConfig(config, keyEnum) {
           errors.push(`"input.${k}" must be true or false.`);
         }
       }
+      // null/missing -> derived from the Game.log path
+      if (inp.actionmaps !== undefined && inp.actionmaps !== null && typeof inp.actionmaps !== "string") {
+        errors.push('"input.actionmaps" must be a string (path to actionmaps.xml).');
+      }
     }
   }
 
   const seenIds = new Map(); // id -> location where it was first used
+  const toggleIds = new Set();
 
   config.pages.forEach((page, pi) => {
     const pageRef = `page ${pi + 1} ("${page?.title ?? page?.id ?? "?"}")`;
@@ -126,6 +135,13 @@ function validateConfig(config, keyEnum) {
           );
         } else {
           seenIds.set(w.id, wRef);
+          if (w.type === "toggle") toggleIds.add(w.id);
+        }
+
+        // "action": the SC action this widget triggers - physical presses
+        // of its bindings flip the toggle, "effects" of it apply
+        if (w?.action !== undefined && !isActionName(w.action)) {
+          errors.push(`${wRef}: "action" must be an SC action name (e.g. "v_power_toggle_weapons").`);
         }
 
         if (!VALID_TYPES.includes(w?.type)) {
@@ -203,6 +219,29 @@ function validateConfig(config, keyEnum) {
       });
     });
   });
+
+  // Optional "effects": SC action -> toggles it sets to a fixed state
+  // ({ "v_flightready": { "pwr-all": true } }). Checked after the pages,
+  // because the toggle ids must exist.
+  if (config.effects !== undefined) {
+    if (!isPlainObject(config.effects)) {
+      errors.push('"effects" must be an object ({ "<action>": { "<toggle id>": true } }).');
+    } else {
+      for (const [action, sets] of Object.entries(config.effects)) {
+        const ref = `"effects.${action}"`;
+        if (!isActionName(action)) {
+          errors.push(`${ref}: not a valid SC action name.`);
+        } else if (!isPlainObject(sets)) {
+          errors.push(`${ref} must be an object of toggle id -> true/false.`);
+        } else {
+          for (const [id, value] of Object.entries(sets)) {
+            if (typeof value !== "boolean") errors.push(`${ref}: "${id}" must be true or false.`);
+            else if (!toggleIds.has(id)) errors.push(`${ref}: "${id}" is not a toggle id.`);
+          }
+        }
+      }
+    }
+  }
 
   return { errors, warnings };
 }

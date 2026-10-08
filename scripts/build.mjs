@@ -46,6 +46,8 @@ const UNIT_TESTS = [
   "test/themes.test.mjs",
   "test/scancode.test.js",
   "test/input.test.mjs",
+  "test/actionmaps.test.js",
+  "test/inputActions.test.mjs",
 ];
 
 let step = 0;
