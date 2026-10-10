@@ -9,6 +9,8 @@
 // Leaving (channel left) remembers the state and falls back to "initial"
 // until the next boarding.
 
+import { isFlagKey } from "./inputActions.js";
+
 // Initial toggle states as declared in the config
 export function initialToggleStates(pages) {
   const states = {};
@@ -175,6 +177,8 @@ export function restoreSnapshot(snapshot, event, pages) {
   const saved = booleanMap(snapshot.toggleStates);
   const toggleStates = { ...initial };
   for (const id of Object.keys(initial)) if (id in saved) toggleStates[id] = saved[id];
+  // once-flags (Flight Ready done) are no widgets, keep them as well
+  for (const id of Object.keys(saved)) if (isFlagKey(id)) toggleStates[id] = saved[id];
 
   const vehicleMemory = {};
   if (isObject(snapshot.vehicleMemory)) {

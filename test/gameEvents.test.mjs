@@ -215,11 +215,11 @@ test("snapshot of another game session is not restored", () => {
 
 test("restore: toggles follow the current config, garbage is dropped", () => {
   const snap = snapshotOf(live());
-  snap.toggleStates = { lights: true, removedWidget: true, wpn: "yes" };
+  snap.toggleStates = { lights: true, removedWidget: true, wpn: "yes", "once:v_flightready": true };
   snap.vehicleMemory = { "A:P": { lights: false, junk: 3 }, "B:P": "nope" };
   const up = restoreSnapshot(snap, ev(1), pages);
-  // wpn: invalid value -> initial (true); removed widget dropped
-  assert.deepStrictEqual(up.toggleStates, { lights: true, wpn: true });
+  // wpn: invalid value -> initial (true); removed widget dropped; once-flag kept
+  assert.deepStrictEqual(up.toggleStates, { lights: true, wpn: true, "once:v_flightready": true });
   assert.deepStrictEqual(up.vehicleMemory, { "A:P": { lights: false }, "B:P": {} });
 });
 

@@ -192,27 +192,42 @@ with sync_playwright() as p:
 
     key = lambda k, down=True: page3.evaluate(
         f"window.__input({{type:'input', source:'keyboard', key:'{k}', down:{str(down).lower()}, injected:false}})")
+    shown = lambda: [sw(l).is_checked() for l in power]
     key("P"); key("P", False)
     page3.wait_for_timeout(150)
-    assert sw("WPN").is_checked(), "physical P must flip WPN"
+    assert not sw("WPN").is_checked(), "P while master power is off does nothing (SC ignores it)"
     assert "→ v_power_toggle_weapons" in dbg.inner_text(), dbg.inner_text()
-    assert page3.get_by_text("INPUT: WPN → ON").count() > 0, "status bar misses the input change"
+    key("U"); key("U", False)
+    page3.wait_for_timeout(150)
+    assert shown() == [True, True, False, True], f"U on a fresh ship: WPN + SHLD on, THR off ({shown()})"
+    assert page3.get_by_text("INPUT: WPN → ON, SHLD → ON, POWER → ON").count() > 0, "status bar misses the input change"
+    key("P"); key("P", False)
+    page3.wait_for_timeout(150)
+    assert not sw("WPN").is_checked(), "physical P must flip WPN"
     key("LeftAlt"); key("P"); key("P", False); key("LeftAlt", False)
     page3.wait_for_timeout(150)
-    assert sw("WPN").is_checked(), "LeftAlt+P is not the WPN bind"
+    assert not sw("WPN").is_checked(), "LeftAlt+P is not the WPN bind"
 
     # flight ready on the left stick (js2_button28): everything on
-    page3.evaluate("""window.__pads[0] = { index: 0, id: "VKBsim Gladiator EVO OT L (Vendor: 231d Product: 3201)",
-      buttons: Array.from({length: 32}, (_, i) => ({ pressed: i === 27 })) }""")
+    stick = lambda b: page3.evaluate(f"""window.__pads[0] = {{ index: 0, id: "VKBsim Gladiator EVO OT L (Vendor: 231d Product: 3201)",
+      buttons: Array.from({{length: 32}}, (_, i) => ({{ pressed: i === {b} }})) }}""")
+    stick(27)
     page3.wait_for_timeout(150)
-    assert all(sw(l).is_checked() for l in power), "flight ready must switch all power on"
-    # deck tap on POWER (v_power_toggle): only the master switch flips
-    page3.locator('label:has-text("POWER")').first.dispatch_event("pointerdown")
-    page3.locator('label:has-text("POWER")').first.dispatch_event("pointerup")
-    page3.wait_for_timeout(200)
-    assert not sw("POWER").is_checked() and all(sw(l).is_checked() for l in power[1:]), \
-        "master power must leave the subsystems alone"
-    print("✓ input actions ok (keyboard + joystick binds, exact modifiers, flight ready, start OFF)")
+    assert all(shown()), "flight ready must switch all power on"
+    stick(-1)
+    page3.wait_for_timeout(100)
+    # deck tap on POWER (v_power_toggle): subsystems show OFF, come back on
+    tap_power = lambda: (page3.locator('label:has-text("POWER")').first.dispatch_event("pointerdown"),
+                         page3.locator('label:has-text("POWER")').first.dispatch_event("pointerup"),
+                         page3.wait_for_timeout(200))
+    tap_power()
+    assert not any(shown()), "master power off shows every subsystem OFF"
+    stick(27)  # flight ready a second time: ignored (once per ship)
+    page3.wait_for_timeout(150)
+    assert not any(shown()), "flight ready only works once per ship"
+    tap_power()
+    assert all(shown()), "master power on restores the remembered subsystems"
+    print("✓ input actions ok (binds, exact modifiers, master power, flight ready once, start OFF)")
 
     # With Game.log tracking: inputs only count while in a ship (P on foot
     # must not flip WPN)
@@ -234,17 +249,17 @@ with sync_playwright() as p:
     page4.wait_for_timeout(1200)
     page4.locator('[aria-label="Previous page"]').dispatch_event("pointerdown")
     page4.wait_for_timeout(300)
-    wpn4 = page4.locator('label:has-text("WPN") input[type=checkbox]').first
-    press_p = "window.__input({type:'input', source:'keyboard', key:'P', down:true}); window.__input({type:'input', source:'keyboard', key:'P', down:false})"
+    pwr4 = page4.locator('label:has-text("POWER") input[type=checkbox]').first
+    press_u = "window.__input({type:'input', source:'keyboard', key:'U', down:true}); window.__input({type:'input', source:'keyboard', key:'U', down:false})"
     page4.evaluate("window.__fire({type:'gamelog-status', state:'watching'})")
-    page4.evaluate(press_p)
+    page4.evaluate(press_u)
     page4.wait_for_timeout(150)
-    assert not wpn4.is_checked(), "on foot (Game.log active, no ship) P must not flip WPN"
+    assert not pwr4.is_checked(), "on foot (Game.log active, no ship) U must not flip POWER"
     assert "MAP: LOADED" in page4.locator("[data-input-debug]").inner_text(), "bindings via getInputBindings"
     page4.evaluate("window.__fire({type:'vehicle-changed', vehicleId:'AEGS_Gladius:me', vehicleClass:'AEGS_Gladius'})")
-    page4.evaluate(press_p)
+    page4.evaluate(press_u)
     page4.wait_for_timeout(150)
-    assert wpn4.is_checked(), "in a ship P must flip WPN"
+    assert pwr4.is_checked(), "in a ship U must flip POWER"
     print("✓ input actions only count in a ship when Game.log is tracked")
 
     # --- Error case: broken config ---

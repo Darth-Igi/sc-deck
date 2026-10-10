@@ -1,6 +1,7 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.16 (Phase C: Tastatur- und Joystick-Eingaben schalten die
+Stand: v2.17 (Master-Power: WPN/THR/SHLD hängen per `requires` an POWER,
+Flight Ready nur einmal je Schiff; v2.16: Phase C: Tastatur- und Joystick-Eingaben schalten die
 Power-Toggles über die SC-Belegungen aus `actionmaps.xml`, Flight Ready
 schaltet alles ein, Power startet aus; v2.15: Phase B, Eingaben mitlesen;
 v2.14: Power-Seite, je System
@@ -125,7 +126,7 @@ sc-deck/
 │       └── StatusBar.jsx  Letzter Fehler + Game.log-Info (SHIP: …) +
 │                          manuelle Korrekturen + Dev-Theme-Wähler
 └── test/
-    ├── configValidation.test.js  23 Unit-Tests (inkl. gamelog, accent,
+    ├── configValidation.test.js  25 Unit-Tests (inkl. gamelog, accent,
     │                             hold, rows/columns, input, action, effects)
     ├── gamelog.test.js           36 Unit-Tests: Parser (Kanal-Pfad mit
     │                             echten Log-Zeilen, Session-Replays,
@@ -143,7 +144,7 @@ sc-deck/
     │                             Nutzers (3 VKB-Geräte, keine Personendaten)
     ├── actionmaps.test.js        8 Unit-Tests (v2.16): Parser, Geräte-GUID,
     │                             Defaults/Rebind/Unbind, Tastennamen
-    ├── inputActions.test.mjs     6 Unit-Tests (v2.16): Matcher (exakte
+    ├── inputActions.test.mjs     9 Unit-Tests (v2.16): Matcher (exakte
     │                             Modifier, Joystick per GUID), Flight Ready,
     │                             Master-Power
     ├── input.test.mjs            9 Unit-Tests (v2.15): Scancode→Name,
@@ -490,6 +491,25 @@ Config:
   aus (Praxistest 2026-10-08).
 - **Master-Power (U)** schaltet nur POWER um, die Einzelzustände bleiben
   (laut Nutzer behält SC sie über Aus/Ein: „THR war aus, Rest an“).
+- **`requires`** (v2.17, Praxistest 2026-10-10): WPN/THR/SHLD haben
+  `"requires": "pwr-all"`. Gespeichert wird ihr eigener Zustand, **angezeigt**
+  `eigener && POWER` (`isToggleOn`, `inputActions.js`). Bei POWER aus tut
+  ihre Aktion nichts (SC ignoriert P/I/O dann – Nutzer), weder per Taste noch
+  per Deck-Tap; die Long-Press-Korrektur ändert den gespeicherten Zustand und
+  meldet `(MASTER OFF)`. Frisch ausgeparkt: POWER aus, gespeichert WPN/SHLD
+  an, THR aus → alles aus angezeigt, U bringt WPN + SHLD (laut Nutzer).
+  Statusmeldungen beschreiben die **angezeigten** Änderungen
+  (`INPUT: WPN → ON, SHLD → ON, POWER → ON`). Nur eine Ebene (validiert).
+- **`once`** in `effects` (v2.17): Flight Ready geht laut Nutzer nur einmal je
+  Schiff, danach ist es Power an/aus. Merker als Pseudo-Toggle
+  `once:v_flightready` in `toggleStates` → wandert automatisch mit in
+  `vehicleMemory` und Snapshot, verschwindet bei jedem Reset auf `initial`
+  (frisches Schiff, ⟲). `loadConfig` (Hot-Reload) und `restoreSnapshot`
+  behalten `once:`-Schlüssel ausdrücklich (`isFlagKey`).
+- **Aufstehen vom Pilotensitz** sperrt Eingaben bewusst **nicht**
+  (Nutzerentscheidung 2026-10-10): Hinsetzen steht nicht im Log (nur
+  `ClearDriver` beim Aufstehen), und im Schiff drückt man die Power-Tasten
+  selten. Reset erst beim Verlassen des Schiffs.
 - **Belegungen** (`actionmaps.js`, Main): `actionmaps.xml` enthält nur
   **geänderte** Belegungen. Tastatur-Defaults stehen deshalb in
   `DEFAULT_KEYBOARD_BINDINGS` (U/P/I/O, `RightAlt+R`). Ein `kb1_`-Rebind
@@ -694,6 +714,12 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
 - Schiffserkennung hängt am **englischen** Kanal-Text und am
   Anzeigenamen; `MANUFACTURER_CODES` ist für Hersteller ohne Theme
   (ARGO, CNOU, …) noch nicht im echten Log belegt.
+- Spielende wird nicht erkannt: Wer SC im Schiff sitzend beendet, sieht
+  beim nächsten App-Start (ohne laufendes Spiel) weiter dessen Theme, bis
+  SC startet und den Log leert. Bewusst so belassen (Nutzer, 2026-10-10).
+  Falls nötig: `<SystemQuit> CSystem::Quit` (sauberes Beenden) bzw.
+  `[CSessionManager::RequestFrontEnd] Started` (Hauptmenü) stehen im Log;
+  Absturz hinterlässt nichts (dann nur Prozess-Check `StarCitizen.exe`).
 - Chamfer-Formen: nur deckende Füllungen, kein Glow (siehe Abschnitt 7).
 - Logo-Dateien liegen nur lokal beim Nutzer (gitignored) – ein frischer
   Clone baut, zeigt aber keine Logos.
@@ -701,10 +727,10 @@ Hersteller (ARGO, CNOU, …) weiterhin beim ersten Einsteigen über StatusBar
 ## 10. Testing
 
 ```bash
-npm test        # 128 Unit-Tests: Config-Validierung (23), Game.log-Parser/
+npm test        # 133 Unit-Tests: Config-Validierung (25), Game.log-Parser/
                 # Pipeline/Tailer (36), Event→Toggle-Logik + Persistenz (21),
                 # Ship-Themes + Logos (15), Scancode (10), Input (9),
-                # actionmaps (8), Input-Aktionen (6). Reines Node,
+                # actionmaps (8), Input-Aktionen (9). Reines Node,
                 # plattformunabhängig.
 npm run test:ui # Headless-Playwright: Rendering/Toggle (Tap +
                 # Long-Press-Korrektur)/Nav/Reset/Quit/Error,
@@ -715,7 +741,7 @@ python test/screenshots.py <dir> [Klasse ...]
                 # kein Test: PNGs aller Seiten (Default + je Schiff), für
                 # Pixelvergleiche vor/nach Refactorings und Theme-Design
 ```
-Alle Suiten liefen beim Stand v2.16 grün (Playwright gegen frischen Build).
+Alle Suiten liefen beim Stand v2.17 grün (Playwright gegen frischen Build).
 `render.test.py` entfernt `input` aus der geladenen Nutzer-Config – die ist
 lokal oft zum Testen aktiv und brach sonst den Opt-in-Check.
 **Windows-Konsole:** Die Suiten geben `✓` aus – ohne
@@ -774,10 +800,14 @@ Hold ist kein zweites Toggle).
      Nutzerwunsch für Phase C: mit Power **aus** starten, Flight Ready
      erkennen und dann die Toggles auf an setzen.
    - **Phase B (v2.15):** siehe Abschnitt 6b, im Spiel bestätigt.
-   - **Phase C (v2.16, gebaut):** siehe Abschnitt 6c. **Im Spiel zu
-     prüfen:** Schiff ausparken → alles aus; Stick-Button bzw. P/I/O/U
-     schaltet die Anzeige mit; Flight Ready (`RightAlt+R` / `js2_button28`)
-     → alles an; zu Fuß ändert P nichts.
+   - **Phase C (v2.16):** siehe Abschnitt 6c. **Praxistest 2026-10-10:**
+     Apollo/M80 starten aus ✓, jede Taste/jeder Stick-Button schaltet ✓,
+     Flight Ready → alles an ✓, aber U brachte WPN/SHLD nicht mit → v2.17
+     (`requires`, `once`). Vom Pilotensitz aufgestanden zählen Tasten weiter
+     – bewusst so belassen (Abschnitt 6c).
+   - **v2.17 im Spiel zu prüfen:** frisches Schiff, U → WPN + SHLD an, THR
+     aus; U aus → alles aus, U an → vorheriger Stand; P bei Power aus →
+     nichts; Flight Ready ein zweites Mal → keine Änderung am Deck.
    - Offen aus 2026-10-05: Reset-Werte nach F8, Kopplung der Kanäle.
 5. Formular-basierter Editier-Modus in der App (schreibt config.json).
 6. ~~`electron-builder`-Packaging~~ → erledigt (Commit `bef1fff`, war im
@@ -887,6 +917,13 @@ Hold ist kein zweites Toggle).
     `actionmaps.js`, `src/inputActions.js`, `action`/`effects` in der
     Config, Power-Toggles `initial: false`. 128 Unit-Tests + 3 UI-Suiten
     grün, Electron-Smoke-Test mit echter actionmaps.xml ohne Warnungen.
+
+23. **v2.17**: Praxistest Phase C (siehe §11.4). Rückfragen → Entscheidungen:
+    frisches Schiff zeigt alles aus, U bringt WPN + SHLD (THR nicht), P bei
+    Power aus wirkt nicht, Flight Ready nur einmal je Schiff, Aufstehen sperrt
+    nichts. Spielende-Erkennung (`SystemQuit`) bewusst nicht gebaut (§9).
+    Neu: `requires` an Toggles, `once` in `effects`. 133 Unit-Tests + 3
+    UI-Suiten grün.
 
 ## 13. Hinweise für den nächsten Agenten
 

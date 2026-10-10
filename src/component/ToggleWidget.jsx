@@ -1,5 +1,6 @@
 import { FormControlLabel, styled, Switch } from '@mui/material'
 import { useDeckStore } from '../store'
+import { isToggleOn } from '../inputActions'
 import { useShipTheme } from '../themes/ShipThemeProvider'
 import { themeColor } from '../themes/resolve'
 import { HOLD_MS, useTapOrHold } from '../useLongPress'
@@ -106,7 +107,8 @@ const ToggleSwitch = styled(Switch, {
 export default function ToggleWidget({ widget }) {
   const triggerToggle = useDeckStore((s) => s.triggerToggle)
   const correctToggle = useDeckStore((s) => s.correctToggle)
-  const isOn = useDeckStore((s) => Boolean(s.toggleStates[widget.id]))
+  // displayed state: OFF while a "requires" master toggle is off
+  const isOn = useDeckStore((s) => isToggleOn(s.toggleStates, widget))
   const hasError = useDeckStore((s) => s.errorId === widget.id)
 
   const { holding, handlers } = useTapOrHold(

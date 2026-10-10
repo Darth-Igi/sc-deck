@@ -8,7 +8,13 @@ import {
   restoreSnapshot,
   snapshotOf,
 } from "./gameEvents";
-import { applyActions, createActionMatcher, describeChanges } from "./inputActions";
+import {
+  applyActions,
+  createActionMatcher,
+  describeChanges,
+  isFlagKey,
+  isToggleOn,
+} from "./inputActions";
 
 // Default key hold for a button's "hold" action. SC's hold threshold is not
 // documented; per widget overridable via "hold.holdMs" (config.json).
@@ -85,11 +91,10 @@ export const useDeckStore = create((set, get) => ({
     const { gamelogState, currentVehicleId, toggleStates, pages, effects } = get();
     if (!actions.length || (gamelogState && !currentVehicleId)) return;
     const result = applyActions(toggleStates, actions, pages, effects);
-    if (result) {
-      set({
-        toggleStates: result.toggleStates,
-        gameStatus: { message: describeChanges("INPUT", result.changes), time: new Date().toLocaleTimeString() },
-      });
+    if (!result) return;
+    set({ toggleStates: result.toggleStates });
+    if (result.changes.length) {
+      set({ gameStatus: { message: describeChanges("INPUT", result.changes), time: new Date().toLocaleTimeString() } });
     }
   },
   setJoystickDevices: (devices) => set({ joystickDevices: devices }),
@@ -186,9 +191,11 @@ export const useDeckStore = create((set, get) => ({
     }
 
     // Toggle states: known widgets keep their current state (important
-    // for config hot reload), new ones start with "initial".
+    // for config hot reload), new ones start with "initial". Once-flags
+    // (Flight Ready done) belong to the ship and are kept too.
     const prev = get().toggleStates;
     const toggleStates = {};
+    for (const key of Object.keys(prev)) if (isFlagKey(key)) toggleStates[key] = prev[key];
     for (const page of result.config.pages) {
       for (const panel of page.panels) {
         for (const w of panel.widgets) {
@@ -295,7 +302,7 @@ export const useDeckStore = create((set, get) => ({
     const ok = await get()._sendKeys(widget);
     if (ok && widget.action) {
       get()._applyWidgetAction(widget); // flips this toggle too
-    } else if (ok) {
+    } else if (ok && (!widget.requires || get().toggleStates[widget.requires])) {
       set((state) => ({
         toggleStates: {
           ...state.toggleStates,
@@ -332,13 +339,16 @@ export const useDeckStore = create((set, get) => ({
   // in-game, keys pressed on the physical keyboard) without the shotgun
   // of a full manual reset. Reported in the status bar so an accidental
   // hold is noticeable.
+  // A toggle whose "requires" master is off keeps showing OFF - the hint
+  // tells why nothing visible happened.
   correctToggle: (widget) =>
     set((state) => {
       const next = !state.toggleStates[widget.id];
+      const masterOff = widget.requires && !state.toggleStates[widget.requires];
       return {
         toggleStates: { ...state.toggleStates, [widget.id]: next },
         gameStatus: {
-          message: `MANUAL: ${widget.label} → ${next ? "ON" : "OFF"}`,
+          message: `MANUAL: ${widget.label} → ${next ? "ON" : "OFF"}${masterOff ? " (MASTER OFF)" : ""}`,
           time: new Date().toLocaleTimeString(),
         },
       };

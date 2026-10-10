@@ -96,6 +96,7 @@ function validateConfig(config, keyEnum) {
 
   const seenIds = new Map(); // id -> location where it was first used
   const toggleIds = new Set();
+  const requiring = []; // [wRef, widget] - "requires" is checked after all ids are known
 
   config.pages.forEach((page, pi) => {
     const pageRef = `page ${pi + 1} ("${page?.title ?? page?.id ?? "?"}")`;
@@ -142,6 +143,14 @@ function validateConfig(config, keyEnum) {
         // of its bindings flip the toggle, "effects" of it apply
         if (w?.action !== undefined && !isActionName(w.action)) {
           errors.push(`${wRef}: "action" must be an SC action name (e.g. "v_power_toggle_weapons").`);
+        }
+
+        // "requires": master toggle id (WPN -> POWER). The toggle keeps its
+        // state but only shows/acts as ON while the master is on.
+        if (w?.requires !== undefined) {
+          if (w.type !== "toggle") errors.push(`${wRef}: "requires" is only supported on toggles.`);
+          else if (typeof w.requires !== "string") errors.push(`${wRef}: "requires" must be a toggle id.`);
+          else requiring.push([wRef, w]);
         }
 
         if (!VALID_TYPES.includes(w?.type)) {
@@ -220,9 +229,20 @@ function validateConfig(config, keyEnum) {
     });
   });
 
+  // One level only: a master must not require another toggle itself
+  const masters = new Map(requiring.map(([, w]) => [w.id, w.requires]));
+  for (const [wRef, w] of requiring) {
+    if (w.requires === w.id) errors.push(`${wRef}: "requires" must not point to itself.`);
+    else if (!toggleIds.has(w.requires)) errors.push(`${wRef}: "requires": "${w.requires}" is not a toggle id.`);
+    else if (masters.has(w.requires)) {
+      errors.push(`${wRef}: "requires": "${w.requires}" has a "requires" itself (only one level supported).`);
+    }
+  }
+
   // Optional "effects": SC action -> toggles it sets to a fixed state
-  // ({ "v_flightready": { "pwr-all": true } }). Checked after the pages,
-  // because the toggle ids must exist.
+  // ({ "v_flightready": { "once": true, "pwr-all": true } }; "once": only
+  // the first trigger per ship counts). Checked after the pages, because
+  // the toggle ids must exist.
   if (config.effects !== undefined) {
     if (!isPlainObject(config.effects)) {
       errors.push('"effects" must be an object ({ "<action>": { "<toggle id>": true } }).');
@@ -235,7 +255,9 @@ function validateConfig(config, keyEnum) {
           errors.push(`${ref} must be an object of toggle id -> true/false.`);
         } else {
           for (const [id, value] of Object.entries(sets)) {
-            if (typeof value !== "boolean") errors.push(`${ref}: "${id}" must be true or false.`);
+            if (id === "once") {
+              if (typeof value !== "boolean") errors.push(`${ref}: "once" must be true or false.`);
+            } else if (typeof value !== "boolean") errors.push(`${ref}: "${id}" must be true or false.`);
             else if (!toggleIds.has(id)) errors.push(`${ref}: "${id}" is not a toggle id.`);
           }
         }

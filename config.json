@@ -355,7 +355,8 @@
                 "P"
               ],
               "action": "v_power_toggle_weapons",
-              "initial": false
+              "requires": "pwr-all",
+              "initial": true
             },
             {
               "type": "button",
@@ -388,6 +389,7 @@
                 "I"
               ],
               "action": "v_power_toggle_thrusters",
+              "requires": "pwr-all",
               "initial": false
             },
             {
@@ -421,7 +423,8 @@
                 "O"
               ],
               "action": "v_power_toggle_shields",
-              "initial": false
+              "requires": "pwr-all",
+              "initial": true
             }
           ]
         },
@@ -455,6 +458,7 @@
   ],
   "effects": {
     "v_flightready": {
+      "once": true,
       "pwr-all": true,
       "pwr-wpn": true,
       "pwr-thr": true,

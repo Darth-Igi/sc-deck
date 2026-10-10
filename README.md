@@ -121,6 +121,11 @@ longer used in development mode.
   actions and flight ready are built in, because SC only stores changed
   bindings.
 
+- `requires` (toggle): id of a master toggle, e.g. `"pwr-all"` on WPN. The
+  toggle keeps its own state but shows OFF while the master is off, and its
+  action does nothing then - like SC, which remembers the subsystems across
+  master power off/on.
+
 Optional `input` section (all off by default):
 `{ "keyboard": true, "joystick": true, "debug": true, "actionmaps": null }`
 listens to physical keyboard input (low-level hook, listen-only; the deck's
@@ -133,7 +138,10 @@ their matched action in the status bar. Nothing is written to disk.
 
 Optional `effects` section: SC action → toggles it sets to a fixed state,
 applied to a physical press and to a deck tap of a widget with that action:
-`{ "v_flightready": { "pwr-all": true, "pwr-wpn": true } }`.
+`{ "v_flightready": { "once": true, "pwr-all": true, "pwr-wpn": true } }`.
+With `"once": true` only the first trigger per ship counts (Flight Ready;
+afterwards it is master power on/off). Leaving the ship keeps that per ship,
+a fresh ship or the manual reset clears it.
 
 The config is **validated** on load (structure, key names against the
 nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with

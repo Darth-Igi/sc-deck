@@ -146,6 +146,23 @@ test("widget action: SC action name", () => {
   assert.ok(validateConfig(wrap([widget({ action: 3 })]), Key).errors.some((e) => e.includes('"action"')));
 });
 
+test("requires: toggle -> existing master toggle, one level", () => {
+  const errs = (...widgets) => validateConfig(wrap(widgets), Key).errors;
+  const t = (id, extra = {}) => widget({ type: "toggle", id, ...extra });
+  assert.deepStrictEqual(errs(t("m"), t("s", { requires: "m" })), []);
+  assert.ok(errs(t("s", { requires: "nope" })).some((e) => e.includes('"nope" is not a toggle id')));
+  assert.ok(errs(t("s", { requires: "s" })).some((e) => e.includes("itself")));
+  assert.ok(errs(widget({ id: "b" }), t("s", { requires: "b" })).some((e) => e.includes('"b" is not a toggle id')));
+  assert.ok(errs(t("m"), widget({ id: "b", requires: "m" })).some((e) => e.includes("only supported on toggles")));
+  assert.ok(errs(t("a"), t("b", { requires: "a" }), t("c", { requires: "b" })).some((e) => e.includes("one level")));
+});
+
+test("effects: once flag", () => {
+  const cfg = (effects) => ({ ...wrap([widget({ type: "toggle", id: "t1" })]), effects });
+  assert.deepStrictEqual(validateConfig(cfg({ v_flightready: { once: true, t1: true } }), Key).errors, []);
+  assert.ok(validateConfig(cfg({ v_flightready: { once: "yes" } }), Key).errors.some((e) => e.includes('"once" must be')));
+});
+
 test("effects: action -> existing toggle ids with booleans", () => {
   const cfg = (effects) => ({ ...wrap([widget({ type: "toggle", id: "t1" }), widget({ id: "b1" })]), effects });
   assert.deepStrictEqual(validateConfig(cfg({ v_flightready: { t1: true } }), Key).errors, []);

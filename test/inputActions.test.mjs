@@ -3,7 +3,13 @@
 import assert from "assert";
 import fs from "fs";
 import { createRequire } from "module";
-import { applyActions, createActionMatcher, describeChanges } from "../src/inputActions.js";
+import {
+  applyActions,
+  createActionMatcher,
+  describeChanges,
+  isToggleOn,
+  ONCE_PREFIX,
+} from "../src/inputActions.js";
 import { initialToggleStates } from "../src/gameEvents.js";
 
 const require = createRequire(import.meta.url);
@@ -54,26 +60,63 @@ test("joystick: device by product GUID, SC button numbers (real bindings)", () =
   assert.deepStrictEqual(match({ source: "joystick", product: null, vendor: null, button: 11, down: true }), []);
 });
 
-test("power starts OFF; flight ready switches everything on", () => {
-  const initial = initialToggleStates(config.pages);
-  for (const id of ["pwr-all", "pwr-wpn", "pwr-thr", "pwr-shld"]) assert.strictEqual(initial[id], false, id);
-  const r = applyActions(initial, ["v_flightready"], config.pages, config.effects);
-  assert.deepStrictEqual(
-    r.changes.map((c) => [c.id, c.value]),
-    [["pwr-wpn", true], ["pwr-thr", true], ["pwr-shld", true], ["pwr-all", true]]
+const POWER = ["pwr-all", "pwr-wpn", "pwr-thr", "pwr-shld"];
+const shown = (states) => {
+  const byId = Object.fromEntries(
+    config.pages.flatMap((p) => p.panels.flatMap((pl) => pl.widgets)).map((w) => [w.id, w])
   );
-  assert.strictEqual(r.toggleStates["wpn-safety"], initial["wpn-safety"], "other toggles untouched");
-  assert.strictEqual(applyActions(r.toggleStates, ["v_flightready"], config.pages, config.effects), null,
-    "flight ready only switches on - no change when already on");
+  return Object.fromEntries(POWER.map((id) => [id, isToggleOn(states, byId[id])]));
+};
+const run = (states, ...actions) => applyActions(states, actions, config.pages, config.effects);
+
+test("fresh ship shows everything OFF; master power brings up WPN + SHLD, not THR", () => {
+  const initial = initialToggleStates(config.pages);
+  assert.deepStrictEqual(shown(initial), { "pwr-all": false, "pwr-wpn": false, "pwr-thr": false, "pwr-shld": false });
+  const on = run(initial, "v_power_toggle");
+  assert.deepStrictEqual(
+    on.changes.map((c) => [c.id, c.value]),
+    [["pwr-wpn", true], ["pwr-shld", true], ["pwr-all", true]],
+    "status lists what became visible"
+  );
+  assert.deepStrictEqual(shown(on.toggleStates), { "pwr-all": true, "pwr-wpn": true, "pwr-thr": false, "pwr-shld": true });
 });
 
-test("toggle actions flip; master power leaves the subsystems alone", () => {
-  const on = { ...initialToggleStates(config.pages), "pwr-all": true, "pwr-wpn": true, "pwr-thr": false, "pwr-shld": true };
-  const off = applyActions(on, ["v_power_toggle"], config.pages, config.effects);
-  assert.deepStrictEqual(off.changes, [{ id: "pwr-all", label: "POWER", value: false }]);
-  const thr = applyActions(on, ["v_power_toggle_thrusters"], config.pages, config.effects);
-  assert.deepStrictEqual(thr.changes, [{ id: "pwr-thr", label: "THR", value: true }]);
-  assert.strictEqual(applyActions(on, ["v_unknown"], config.pages, config.effects), null);
+test("master power off hides the subsystems, on restores them (SC remembers)", () => {
+  let s = run(initialToggleStates(config.pages), "v_power_toggle").toggleStates;
+  s = run(s, "v_power_toggle_thrusters", "v_power_toggle_weapons").toggleStates; // THR on, WPN off
+  const off = run(s, "v_power_toggle");
+  assert.deepStrictEqual(shown(off.toggleStates), { "pwr-all": false, "pwr-wpn": false, "pwr-thr": false, "pwr-shld": false });
+  const back = run(off.toggleStates, "v_power_toggle");
+  assert.deepStrictEqual(shown(back.toggleStates), { "pwr-all": true, "pwr-wpn": false, "pwr-thr": true, "pwr-shld": true });
+});
+
+test("subsystem keys do nothing while master power is off", () => {
+  const initial = initialToggleStates(config.pages);
+  assert.strictEqual(run(initial, "v_power_toggle_weapons"), null);
+  assert.strictEqual(run(initial, "v_power_toggle_thrusters"), null);
+  assert.strictEqual(run(initial, "v_unknown"), null);
+});
+
+test("flight ready switches everything on - only once per ship", () => {
+  const initial = initialToggleStates(config.pages);
+  const r = run(initial, "v_flightready");
+  assert.deepStrictEqual(shown(r.toggleStates), { "pwr-all": true, "pwr-wpn": true, "pwr-thr": true, "pwr-shld": true });
+  assert.strictEqual(r.toggleStates["wpn-safety"], initial["wpn-safety"], "other toggles untouched");
+  const off = run(r.toggleStates, "v_power_toggle").toggleStates;
+  assert.strictEqual(run(off, "v_flightready"), null, "second flight ready is ignored");
+  // the flag alone still counts as a change (must be stored), status stays empty
+  const flagOnly = run({ ...initial, "pwr-all": true, "pwr-wpn": true, "pwr-thr": true, "pwr-shld": true }, "v_flightready");
+  assert.deepStrictEqual(flagOnly.changes, []);
+  assert.strictEqual(flagOnly.toggleStates[ONCE_PREFIX + "v_flightready"], true);
+  assert.strictEqual(initialToggleStates(config.pages)[ONCE_PREFIX + "v_flightready"], undefined, "reset clears it");
+});
+
+test("effects without once fire every time", () => {
+  const pages = [{ panels: [{ widgets: [{ type: "toggle", id: "t", label: "T" }] }] }];
+  const fx = { v_x: { t: true } };
+  const first = applyActions({ t: false }, ["v_x"], pages, fx).toggleStates;
+  assert.deepStrictEqual(first, { t: true }, "no flag stored");
+  assert.strictEqual(applyActions({ ...first, t: false }, ["v_x"], pages, fx).toggleStates.t, true);
 });
 
 test("status text", () => {
