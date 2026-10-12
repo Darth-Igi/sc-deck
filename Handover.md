@@ -1,6 +1,6 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.17.1 (Flight Ready wirkt jedes Mal, `once` aus der Config
+Stand: v2.17.2 (Build-Fix: `actionmaps.js` fehlte im Paket; v2.17.1: Flight Ready wirkt jedes Mal, `once` aus der Config
 genommen – Praxistest; v2.17: Master-Power: WPN/THR/SHLD hängen per `requires` an POWER; v2.16: Phase C: Tastatur- und Joystick-Eingaben schalten die
 Power-Toggles über die SC-Belegungen aus `actionmaps.xml`, Flight Ready
 schaltet alles ein, Power startet aus; v2.15: Phase B, Eingaben mitlesen;
@@ -932,6 +932,11 @@ Hold ist kein zweites Toggle).
     es (am Stick) beliebig oft zu. `"once"` aus `effects.v_flightready`
     entfernt, Tests angepasst (Flight Ready wirkt jedes Mal; `once` per
     synthetischer Config weiter getestet).
+
+25. **v2.17.2**: Portable-Build startete nicht ("Cannot find module
+    './actionmaps'"): `actionmaps.js` stand nicht in der `files`-Liste von
+    `electron-builder.yml`, im Dev-Modus fiel das nicht auf. Eingetragen.
+    Neue Main-Process-Module müssen immer dort ergänzt werden.
 
 ## 13. Hinweise für den nächsten Agenten
 
