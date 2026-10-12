@@ -138,10 +138,10 @@ their matched action in the status bar. Nothing is written to disk.
 
 Optional `effects` section: SC action → toggles it sets to a fixed state,
 applied to a physical press and to a deck tap of a widget with that action:
-`{ "v_flightready": { "once": true, "pwr-all": true, "pwr-wpn": true } }`.
-With `"once": true` only the first trigger per ship counts (Flight Ready;
-afterwards it is master power on/off). Leaving the ship keeps that per ship,
-a fresh ship or the manual reset clears it.
+`{ "v_flightready": { "pwr-all": true, "pwr-wpn": true } }`.
+With `"once": true` only the first trigger per ship counts. Leaving the ship
+keeps that per ship, a fresh ship or the manual reset clears it. Flight
+Ready does not use it: SC accepts it again and again.
 
 The config is **validated** on load (structure, key names against the
 nut.js Key enum, duplicate IDs). Errors appear as an on-screen message with

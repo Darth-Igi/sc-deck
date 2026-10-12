@@ -1,7 +1,7 @@
 # SC Deck – Projekt-Handoff
 
-Stand: v2.17 (Master-Power: WPN/THR/SHLD hängen per `requires` an POWER,
-Flight Ready nur einmal je Schiff; v2.16: Phase C: Tastatur- und Joystick-Eingaben schalten die
+Stand: v2.17.1 (Flight Ready wirkt jedes Mal, `once` aus der Config
+genommen – Praxistest; v2.17: Master-Power: WPN/THR/SHLD hängen per `requires` an POWER; v2.16: Phase C: Tastatur- und Joystick-Eingaben schalten die
 Power-Toggles über die SC-Belegungen aus `actionmaps.xml`, Flight Ready
 schaltet alles ein, Power startet aus; v2.15: Phase B, Eingaben mitlesen;
 v2.14: Power-Seite, je System
@@ -500,8 +500,10 @@ Config:
   an, THR aus → alles aus angezeigt, U bringt WPN + SHLD (laut Nutzer).
   Statusmeldungen beschreiben die **angezeigten** Änderungen
   (`INPUT: WPN → ON, SHLD → ON, POWER → ON`). Nur eine Ebene (validiert).
-- **`once`** in `effects` (v2.17): Flight Ready geht laut Nutzer nur einmal je
-  Schiff, danach ist es Power an/aus. Merker als Pseudo-Toggle
+- **`once`** in `effects` (v2.17): allgemeine Option „nur einmal je Schiff“.
+  War für Flight Ready gedacht, Praxistest 2026-10-12: am Stick schaltet
+  Flight Ready im Spiel jedes Mal alle drei Subsysteme an → seit v2.17.1
+  nicht mehr in der Config, Mechanismus bleibt (Unit-Test). Merker als Pseudo-Toggle
   `once:v_flightready` in `toggleStates` → wandert automatisch mit in
   `vehicleMemory` und Snapshot, verschwindet bei jedem Reset auf `initial`
   (frisches Schiff, ⟲). `loadConfig` (Hot-Reload) und `restoreSnapshot`
@@ -805,9 +807,10 @@ Hold ist kein zweites Toggle).
      Flight Ready → alles an ✓, aber U brachte WPN/SHLD nicht mit → v2.17
      (`requires`, `once`). Vom Pilotensitz aufgestanden zählen Tasten weiter
      – bewusst so belassen (Abschnitt 6c).
-   - **v2.17 im Spiel zu prüfen:** frisches Schiff, U → WPN + SHLD an, THR
-     aus; U aus → alles aus, U an → vorheriger Stand; P bei Power aus →
-     nichts; Flight Ready ein zweites Mal → keine Änderung am Deck.
+   - **Praxistest v2.17 (2026-10-12):** frisches Schiff, U → WPN + SHLD an,
+     THR aus ✓; U aus/an → vorheriger Stand ✓; P/I/O bei Power aus → nichts
+     ✓. Flight Ready am Stick ein zweites Mal → im Spiel wieder alles an,
+     Deck blieb aus → v2.17.1: `once` aus der Config entfernt.
    - Offen aus 2026-10-05: Reset-Werte nach F8, Kopplung der Kanäle.
 5. Formular-basierter Editier-Modus in der App (schreibt config.json).
 6. ~~`electron-builder`-Packaging~~ → erledigt (Commit `bef1fff`, war im
@@ -924,6 +927,11 @@ Hold ist kein zweites Toggle).
     nichts. Spielende-Erkennung (`SystemQuit`) bewusst nicht gebaut (§9).
     Neu: `requires` an Toggles, `once` in `effects`. 133 Unit-Tests + 3
     UI-Suiten grün.
+
+24. **v2.17.1**: Praxistest v2.17 bestanden bis auf Flight Ready: SC lässt
+    es (am Stick) beliebig oft zu. `"once"` aus `effects.v_flightready`
+    entfernt, Tests angepasst (Flight Ready wirkt jedes Mal; `once` per
+    synthetischer Config weiter getestet).
 
 ## 13. Hinweise für den nächsten Agenten
 

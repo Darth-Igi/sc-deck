@@ -68,7 +68,7 @@ function toggleWidgets(pages) {
   return out;
 }
 
-// Per-ship flag "this once-only action already ran" (Flight Ready). Lives in
+// Per-ship flag "this once-only action already ran" (config "once"). Lives in
 // toggleStates, so it is remembered per ship, persisted with the snapshot
 // and cleared with every reset to "initial" (fresh ship, manual reset).
 export const ONCE_PREFIX = "once:";
@@ -93,7 +93,7 @@ function effectOf(entry) {
  * Applies actions to the toggle states: toggles bound to the action flip
  * (not while their "requires" master is off - SC ignores the key then),
  * then the action's effects set fixed values. A "once" effect fires only
- * once per ship (Flight Ready; afterwards it is master power on/off).
+ * once per ship (not used by Flight Ready: SC accepts it every time).
  * @returns {{ toggleStates, changes: { id, label, value }[] } | null} null if nothing changed
  */
 export function applyActions(toggleStates, actions, pages, effects = {}) {

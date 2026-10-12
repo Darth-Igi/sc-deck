@@ -97,18 +97,25 @@ test("subsystem keys do nothing while master power is off", () => {
   assert.strictEqual(run(initial, "v_unknown"), null);
 });
 
-test("flight ready switches everything on - only once per ship", () => {
+test("flight ready switches everything on - every time (in-game test v2.17)", () => {
   const initial = initialToggleStates(config.pages);
   const r = run(initial, "v_flightready");
   assert.deepStrictEqual(shown(r.toggleStates), { "pwr-all": true, "pwr-wpn": true, "pwr-thr": true, "pwr-shld": true });
   assert.strictEqual(r.toggleStates["wpn-safety"], initial["wpn-safety"], "other toggles untouched");
   const off = run(r.toggleStates, "v_power_toggle").toggleStates;
-  assert.strictEqual(run(off, "v_flightready"), null, "second flight ready is ignored");
+  assert.deepStrictEqual(shown(run(off, "v_flightready").toggleStates), shown(r.toggleStates), "second flight ready works too");
+});
+
+test("once effects fire only once until reset", () => {
+  const pages = [{ panels: [{ widgets: [{ type: "toggle", id: "t", label: "T" }] }] }];
+  const fx = { v_x: { once: true, t: true } };
+  const first = applyActions({ t: false }, ["v_x"], pages, fx).toggleStates;
+  assert.deepStrictEqual(first, { t: true, [ONCE_PREFIX + "v_x"]: true });
+  assert.strictEqual(applyActions({ ...first, t: false }, ["v_x"], pages, fx), null, "second trigger is ignored");
   // the flag alone still counts as a change (must be stored), status stays empty
-  const flagOnly = run({ ...initial, "pwr-all": true, "pwr-wpn": true, "pwr-thr": true, "pwr-shld": true }, "v_flightready");
+  const flagOnly = applyActions({ t: true }, ["v_x"], pages, fx);
   assert.deepStrictEqual(flagOnly.changes, []);
-  assert.strictEqual(flagOnly.toggleStates[ONCE_PREFIX + "v_flightready"], true);
-  assert.strictEqual(initialToggleStates(config.pages)[ONCE_PREFIX + "v_flightready"], undefined, "reset clears it");
+  assert.strictEqual(flagOnly.toggleStates[ONCE_PREFIX + "v_x"], true);
 });
 
 test("effects without once fire every time", () => {

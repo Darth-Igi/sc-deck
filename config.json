@@ -458,7 +458,6 @@
   ],
   "effects": {
     "v_flightready": {
-      "once": true,
       "pwr-all": true,
       "pwr-wpn": true,
       "pwr-thr": true,

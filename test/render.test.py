@@ -222,12 +222,15 @@ with sync_playwright() as p:
                          page3.wait_for_timeout(200))
     tap_power()
     assert not any(shown()), "master power off shows every subsystem OFF"
-    stick(27)  # flight ready a second time: ignored (once per ship)
-    page3.wait_for_timeout(150)
-    assert not any(shown()), "flight ready only works once per ship"
     tap_power()
     assert all(shown()), "master power on restores the remembered subsystems"
-    print("✓ input actions ok (binds, exact modifiers, master power, flight ready once, start OFF)")
+    tap_power()
+    stick(27)  # flight ready a second time: works again (in-game test v2.17)
+    page3.wait_for_timeout(150)
+    assert all(shown()), "flight ready switches everything on every time"
+    stick(-1)
+    page3.wait_for_timeout(100)
+    print("✓ input actions ok (binds, exact modifiers, master power, flight ready, start OFF)")
 
     # With Game.log tracking: inputs only count while in a ship (P on foot
     # must not flip WPN)
