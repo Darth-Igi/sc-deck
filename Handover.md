@@ -542,6 +542,109 @@ Config:
   ergänzen und, falls die Tastatur-Belegung nicht umgelegt ist, den Default
   in `DEFAULT_KEYBOARD_BINDINGS` nachtragen (+ Test).
 
+## 6d. Telemetrie-API (Phase 0: Mitschnitt, 2026-11-26)
+
+SC bringt eine inoffizielle, lokale **gRPC-Telemetrie** mit
+(`sc.game.telemetry.v1.GameTelemetryService`, `127.0.0.1:2942`, ~20 Hz,
+unverschlüsselt, Frames erst nach dem Spawn). Ziel: echte Schiffszustände statt
+Game.log + Eingaben-Mitlesen. Quellen: github.com/SpartanWolf723/sc-telemetry-api,
+github.com/Purzifal/sc_make_proto.
+
+- **Einschalten 4.10 LIVE:** `setx GRPC_CLIENT_SERVER_ENABLED true`, RSI
+  Launcher komplett beenden (Tray) und neu starten. Kontrolle im Game.log:
+  `Service 'sc.game.telemetry.v1.GameTelemetryService' registered`.
+  5.0: `server.game.telemetry.enabled = 1` in `USER.cfg`.
+  **Nie** `grpc.client.server.external` setzen (keine Authentifizierung).
+- **`telemetrySchema.js`** (Electron-frei, getestet): liest das Schema bei jedem
+  Start aus `StarCitizen.exe` (eingebettete FileDescriptorProtos
+  `sc/game/telemetry/v1/types.proto` + `api.proto`) → protobufjs-Root. Kein
+  mitgeliefertes `.proto`, also robust gegen Patch-Drift. Exe-Pfad:
+  `Bin64\StarCitizen.exe` neben dem Game.log.
+- **`npm run telemetry:record`** (`scripts/telemetry-record.mjs`): nur lesend.
+  Druckt jede Änderung diskreter Werte live (Floats nur in der Statistik),
+  ★ = Power-bezogen. Notiz + Enter setzt eine Marke. Ausgabe in
+  `recordings/<Zeit>/` (gitignored): `schema.txt`, `schema.desc`,
+  `frames.bin` (Rohframes, als Test-Fixture nutzbar), `changes.log`,
+  `summary.json` (Werte je Pfad + nie gesetzte Felder).
+- **Schema 4.10.201.48085:** `VehiclePowerState` = powerplants, engines,
+  weapons, coolers, life_support, gravity_generators, **sensors** (Radar?),
+  shield_generators, shield_emitters (alles bool, **keine Pip-Stufen**).
+  Warnlampen pwr/wpn/thr/shld/cool/qdrv/**radr**/prox/hit/misl. Noch nicht in
+  4.10: shields, health, master_mode, TriggerGameAction (erst 5.0).
+- **Stand 2026-11-26:** Recorder nur gegen einen Fake-Server getestet
+  (Schema aus der echten Exe, Live-Ausgabe/Marken/summary ok). Im echten
+  Spiel noch **nicht** gelaufen – beim Nutzer war die Telemetrie noch aus
+  (kein `GameTelemetryService` im Game.log).
+
+### Nächste Sitzung: Phase 0 im Spiel (Nutzer)
+
+1. `setx GRPC_CLIENT_SERVER_ENABLED true` (einmalig), RSI Launcher komplett
+   beenden (Tray!) und neu starten.
+2. `npm run telemetry:record` in eigenem Terminal starten (wartet aufs Spiel,
+   verbindet automatisch neu).
+3. Schiff ausparken, hinsetzen, nacheinander mit ~2 s Pause schalten:
+   - U (POWER), P, I, O, Flight Ready (`RightAlt+R`)
+   - **im MFD:** Radar/Sensoren, Kühler, Life Support, Quantum
+   - Türen auf/zu + Schloss, Licht, Fahrwerk, ESP, CPL, G-Safe, PROX,
+     Lichtverstärkung, HUD (F4)
+   - aufstehen, aussteigen, wieder einsteigen
+   - optional per Alt+Tab Marken tippen („Radar aus im MFD“ + Enter)
+4. Strg+C → Ordner `recordings/<Zeit>/` dem Agenten nennen.
+
+### Danach: Auswertung (Agent)
+
+- `changes.log`/`summary.json` auswerten und die vermutete Zuordnung prüfen:
+
+  | Widget | vermutetes Feld (`vehicle.state.…`) |
+  |---|---|
+  | POWER (U) | `power.powerplants` ← **unklar, prüfen** |
+  | WPN / THR / SHLD | `power.weapons` / `power.engines` / `power.shield_generators` |
+  | DOORS OPENED / LOCKED | `doors.open_state` / `doors.lock_state` |
+  | HEADLIGHTS / LIGHTS | `lights_enabled` |
+  | LIGHT AMPLIFICATION | `flight.settings.flight_light_amplification` |
+  | ESP / CPL / G-SF / PROX | `flight.settings.ifcs_esp/ifcs_coupled/ifcs_g_safe/ifcs_proximity_assist` (`.active`) |
+  | GEAR | `flight.state.gear` (inkl. DEPLOYING/RETRACTING) |
+  | QNTM | Warnlampe `annunciators.qdrv` |
+  | Radar / Kühler / Life Support (bisher ohne Keybind) | `power.sensors` / `power.coolers` / `power.life_support`, Lampen `radr`/`cool` |
+  | PTT, ITCOM, ALARM, SIL, +1/−1 | kein Feld → bleiben vermutet |
+
+- Klären: Sind die Power-Bools der **wirksame** Zustand (schon `&& POWER`)
+  oder der gespeicherte? Davon hängt ab, ob `requires` entfallen kann.
+- Prüfen: Kommt jeder Frame vollständig, oder fehlen Blöcke zeitweise?
+  Fehlende Felder = Standardwert (proto3), „kein Frame/nicht im Sitz“ muss
+  davon unterscheidbar sein.
+- Ein kurzes Stück von `frames.bin` + `schema.desc` als Fixture nach
+  `test/fixtures/` (vorher prüfen: enthält aUEC-Stand und Schiffsnamen).
+
+### Plan danach (Vorschläge vom 2026-11-26, vom Nutzer noch nicht im Detail abgenommen)
+
+- **Phase 1:** `telemetry.js` im Main (Electron-frei, testbar): gRPC-Client
+  mit Reconnect/Backoff, Schema über `telemetrySchema.js`, Diff im Main →
+  nur Änderungen per `game-event` an den Renderer. Widget-Bindung
+  `"telemetry": "vehicle.state.power.weapons"`: Telemetrie gewinnt immer
+  gegen den vermuteten Zustand; Deck-Tap zeigt optimistisch an und springt
+  nach ~500 ms ohne Bestätigung zurück. Dann `@grpc/grpc-js` +
+  `protobufjs` von devDependencies nach dependencies verschieben und
+  `telemetrySchema.js`/`telemetry.js` in `electron-builder.yml` aufnehmen
+  (vgl. v2.17.2: `actionmaps.js` fehlte im Paket).
+- **Phase 2:** Schiff/Theme aus `vehicle.state.name/class_name/manufacturer`,
+  Sitz aus `ENTER_SEAT`/`LEAVE_SEAT` + `actor.state.crew_role` (schließt
+  die Lücke „Hinsetzen steht nicht im Log“). Tastatur-Hook gar nicht erst
+  starten, solange Telemetrie verbunden ist; Game.log + Eingaben bleiben
+  Fallback und für Toggles ohne Feld.
+- **Phase 3:** neue Anzeige-Widgets: Warnlampen, Treibstoff H₂/Quantum,
+  Boost, Gegenmaßnahmen, Waffen-Preset (ab 5.0: Schilde, Rumpf, NAV/SCM).
+- **Phase 4 (ab 5.0 LIVE):** `TriggerGameAction` mit den vorhandenen
+  `action`-Namen statt Scancodes (kein Fensterfokus, keine
+  Keybinding-Abhängigkeit), `ListTriggerableActions` zur Config-Prüfung;
+  Scancode-Sender bleibt Fallback. Braucht
+  `server.game.telemetry.trigger.actions.enabled`, vom Autor ungetestet.
+- **Risiken:** API inoffiziell/undokumentiert, kann jeder Patch ändern
+  (deshalb Schema aus der Exe + Fallbacks). Lesen unkritisch;
+  `TriggerGameAction` ist Eingabe-Injektion über eine Spiel-Schnittstelle.
+  Reddit-Post (r/starcitizen „New telemetry feature is insane“) konnte nicht
+  gelesen werden (Fetch blockiert), Infos stammen aus den GitHub-Repos.
+
 ## 7. Ship-Themes (NEU v2.10)
 
 **Ziel:** Jedes Schiff kann ein eigenes Styling haben (Farben, Formen,
@@ -770,6 +873,10 @@ Hold ist kein zweites Toggle).
 
 ## 11. Offene/nächste Schritte
 
+0. **Als Nächstes: Telemetrie-Mitschnitt im Spiel** (Phase 0, Abschnitt 6d
+   „Nächste Sitzung“) → Zuordnung prüfen → Phase 1. Könnte Teile von 4.
+   (Radar/Kühler/Life Support als echte Anzeige) und das Eingaben-Mitlesen
+   (6b/6c) ablösen.
 1. ~~Praxistest Default-Patterns~~ → Game.log-Tracking läuft produktiv
    (Config enabled mit echtem Pfad + Handle). Bei Patch-Drift: echte
    Log-Zeilen mit `DEFAULT_PATTERNS` abgleichen, per Config überschreiben.

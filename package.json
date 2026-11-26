@@ -11,8 +11,9 @@
     "dist:portable": "node scripts/build.mjs --portable",
     "dist:installer": "node scripts/build.mjs --installer",
     "dist:dir": "node scripts/build.mjs --dir --skip-tests",
-    "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/themes.test.mjs && node test/scancode.test.js && node test/input.test.mjs && node test/actionmaps.test.js && node test/inputActions.test.mjs",
-    "test:ui": "npm run build && python test/render.test.py && python test/hotreload.test.py && python test/gamelog.render.test.py"
+    "test": "node test/configValidation.test.js && node test/gamelog.test.js && node test/gameEvents.test.mjs && node test/themes.test.mjs && node test/scancode.test.js && node test/input.test.mjs && node test/actionmaps.test.js && node test/inputActions.test.mjs && node test/telemetrySchema.test.js",
+    "test:ui": "npm run build && python test/render.test.py && python test/hotreload.test.py && python test/gamelog.render.test.py",
+    "telemetry:record": "node scripts/telemetry-record.mjs"
   },
   "dependencies": {
     "@emotion/react": "^11.13.0",
@@ -27,11 +28,14 @@
     "zustand": "^4.5.0"
   },
   "devDependencies": {
+    "@grpc/grpc-js": "^1.14.7",
+    "@grpc/proto-loader": "^0.8.1",
     "@vitejs/plugin-react": "^4.3.0",
     "concurrently": "^8.2.0",
     "cross-env": "^7.0.3",
     "electron": "^31.0.0",
     "electron-builder": "^26.15.3",
+    "protobufjs": "^8.8.1",
     "vite": "^5.4.0",
     "wait-on": "^7.2.0"
   }
